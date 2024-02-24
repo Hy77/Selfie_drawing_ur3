@@ -51,7 +51,7 @@ git clone https://github.com/Hy77/Selfie_drawing_ur3.git
    Push your commits to the remote repository:
 
    ```
-   git push origin main
+   git push origin HEAD:main
    ```
 
 ## Resolving Conflicts
