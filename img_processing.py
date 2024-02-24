@@ -1,37 +1,36 @@
 #!/usr/bin/env python3
 import cv2
 import numpy as np
-from scipy.interpolate import splprep, splev
-from scipy.interpolate import interp1d
+from scipy.interpolate import interp1d, splprep, splev
 
 
 # Use can define the img processing method
 def vectorize_contour(contour, method='n'):
-    if method == 'n':  # 最近邻向量化
+    if method == 'n':  # nearest neighbor
         return contour_to_nearest_neighbor_vector(contour)
-    elif method == 'b':  # 双线性向量化
+    elif method == 'b':  # bilinear
         return contour_to_bilinear_vector(contour)
-    elif method == 'c':  # 双三次向量化（暂未实现）
-        return contour  # 返回原始轮廓作为占位符
+    elif method == 'c':  # bicubic
+        return contour_to_cubic_spline(contour)
     else:
         raise ValueError("Invalid vectorization method. Choose 'n' for nearest neighbor, 'b' for bilinear, or 'c' for bicubic.")
 
 
 def contour_to_nearest_neighbor_vector(contour):
-    # 确保轮廓是一个二维数组
+    # Make sure the outline is a two-dimensional array
     contour = contour.reshape(-1, 2)
-    vectorized_contour = [contour[0]]  # 初始化向量化轮廓
+    vectorized_contour = [contour[0]]  # Initialising the vectorised profile
 
     for i in range(1, len(contour)):
         prev_point = vectorized_contour[-1]
         cur_point = contour[i]
 
-        # 检查线段是沿 x 轴对齐还是沿 y 轴对齐
+        # Check whether the line segments are aligned along the x-axis or the y-axis.
         if abs(prev_point[0] - cur_point[0]) > abs(prev_point[1] - cur_point[1]):
-            # x 轴对齐
+            # x-axis alignment
             new_point = (cur_point[0], prev_point[1])
         else:
-            # y 轴对齐
+            # y-axis alignment
             new_point = (prev_point[0], cur_point[1])
 
         vectorized_contour.append(new_point)
@@ -41,26 +40,54 @@ def contour_to_nearest_neighbor_vector(contour):
 
 
 def contour_to_bilinear_vector(contour, num_points=100):
-    # 确保轮廓是一个二维数组
+    # Make sure the outline is a two-dimensional array
     contour = contour.reshape(-1, 2)
     x = np.array(contour[:, 0])
     y = np.array(contour[:, 1])
 
-    # 创建参数化变量
+    # Create parameterised variables
     t = np.linspace(0, 1, len(x))
     t_new = np.linspace(0, 1, num_points)
 
-    # 创建插值函数并生成平滑的曲线
+    # Create interpolating functions and generate smooth curves
     f1 = interp1d(t, x, kind='quadratic')
     f2 = interp1d(t, y, kind='quadratic')
 
-    # 使用插值函数生成新的点
+    # Use the interpolating function to generate new points
     x_new = f1(t_new)
     y_new = f2(t_new)
 
-    # 将新的点组成轮廓
+    # Form new points into contours
     smooth_contour = np.stack((x_new, y_new), axis=1).astype(int)
     return smooth_contour
+
+
+def contour_to_cubic_spline(contour, num_points=100):
+    # 确保轮廓是一个二维数组，并且长度至少为4
+    contour = contour.reshape(-1, 2)
+    if contour.ndim != 2:
+        raise ValueError("Contour is not 2-dimensional or does not have enough points.")
+
+    # 确保没有 NaN 或无穷大的值
+    if np.any(np.isnan(contour)) or np.any(np.isinf(contour)):
+        raise ValueError("Contour contains NaN or infinite values.")
+
+    # 重新塑造轮廓以避免任何潜在的问题
+    x = contour[:, 0]
+    y = contour[:, 1]
+
+    # 参数化轮廓并拟合样条曲线
+    tck, u = splprep([x, y], s=0)
+
+    # 创建等间距的新参数值
+    u_new = np.linspace(0, 1, num_points)
+
+    # 计算新的样条点
+    x_new, y_new = splev(u_new, tck)
+
+    # 将新的点组成轮廓
+    spline_contour = np.vstack((x_new, y_new)).T.astype(int)
+    return spline_contour
 
 
 def img_processing(method='n'):
@@ -107,10 +134,19 @@ def img_processing(method='n'):
     # Find contours
     contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-    # 根据用户选择的方法向量化轮廓
-    vectorized_contours = [vectorize_contour(contour, method=method) for contour in contours if len(contour) > 3]
+    # Vectorised contours based on user-selected methods
+    vectorized_contours = []
+    for contour in contours:
+        if len(contour) > 3:
+            try:
+                vectorized_contour = vectorize_contour(contour, method=method)
+                vectorized_contours.append(vectorized_contour)
+            except ValueError as e:
+                # 打印错误并跳过这个轮廓
+                print(f"Error processing contour: {e}")
+                continue
 
-    # 可视化向量化轮廓
+    # Visualisation of vectorised profiles
     vectorized_image = np.zeros_like(image)
     for vectorized_contour in vectorized_contours:
         cv2.polylines(vectorized_image, [vectorized_contour], isClosed=False, color=(255, 0, 0), thickness=2)
