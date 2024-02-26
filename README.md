@@ -32,12 +32,6 @@ This guide will help you set up a UR3 robot simulator using Gazebo, MoveIt, and 
    sudo apt-get install ros-noetic-ur-gazebo ros-noetic-ur3-moveit-config ros-noetic-moveit
    ```
 
-3. (Optional/tbh idk/why not?) Install the universal-robots package if needed:
-
-   ```bash
-   sudo apt-get install ros-$ROS_DISTRO-universal-robots
-   ```
-
 ## Running the Simulator
 
 1. **Load UR3 Description:**
