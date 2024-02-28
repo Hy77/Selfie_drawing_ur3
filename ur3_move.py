@@ -14,15 +14,53 @@ def move_robot():
     group_name = "manipulator"
     move_group = moveit_commander.MoveGroupCommander(group_name)
 
-    pose_goal = geometry_msgs.msg.Pose()
-    pose_goal.orientation.w = 1.0
-    pose_goal.position.x = 0.4
-    pose_goal.position.y = 0.1
-    pose_goal.position.z = 0.4
+    # Set planning time and goal time tolerance
+    move_group.set_planning_time(10)  # Increase planning time to 10 seconds
 
-    move_group.set_pose_target(pose_goal)
+    # Get initial pose
+    initial_pose = move_group.get_current_pose().pose
+    print("Initial Pose:")
+    print(initial_pose)
 
-    plan = move_group.go(wait=True)
+    # Get user input for target positions
+    targets = []
+    while True:
+        user_input = input("Enter a target position (x, y, z) or 'done' to finish: ")
+        if user_input.lower() == 'done':
+            break
+        try:
+            position = [float(coord) for coord in user_input.split(',')]
+            if len(position) == 3:
+                targets.append(position)
+            else:
+                print("Invalid input. Please enter three coordinates separated by commas.")
+        except ValueError:
+            print("Invalid input. Please enter numeric values.")
+
+    # Move to each target position
+    for target in targets:
+        pose_goal = geometry_msgs.msg.Pose()
+        pose_goal.orientation.w = 1.0
+        pose_goal.position.x = target[0]
+        pose_goal.position.y = target[1]
+        pose_goal.position.z = target[2]
+
+        move_group.set_pose_target(pose_goal)
+
+        # Check if the position is reachable
+        if move_group.plan():
+            print(f"Moving to target position: {target}")
+            move_group.go(wait=True)
+        else:
+            print(f"Target position {target} is not reachable.")
+
+        # Print out mission success msg
+        print(f"{target} success.")
+
+    # Return to initial pose
+    move_group.set_pose_target(initial_pose)
+    move_group.go(wait=True)
+
     move_group.stop()
     move_group.clear_pose_targets()
 
