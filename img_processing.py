@@ -92,13 +92,13 @@ def vectorize_contour(contour, method='n'):
         raise ValueError("Invalid vectorization method. Choose 'n' for nearest neighbor, 'b' for bilinear, or 'c' for bicubic.")
 
 
-def adaptive_simplify_vector(contour, image_dim, min_threshold=5, max_threshold=10):
+def adaptive_simplify_vector(contour, image_dim, min_threshold=10, max_threshold=20):
     # Calculate the proportion of the outline's bounding box size relative to the image size
     _, _, w, h = cv2.boundingRect(contour)
     contour_size_ratio = max(w, h) / max(image_dim)
 
     # Adaptive threshold setting based on contour size
-    if contour_size_ratio < 1:
+    if contour_size_ratio < 15:
         threshold = min_threshold
     else:  # If the profile is large, a larger threshold can be used
         threshold = max_threshold
@@ -167,35 +167,24 @@ def img_processing(method='n'):
     # Load the image
     image = cv2.imread('photo_1.jpg')
 
-    # Show origin img
-    cv2.imshow('Origin', image)
-
     # Remove background
     image_bkg_removal = remove_background(image)
 
     # Resize and center on A3
     image_a3 = resize_and_center_on_a3(image_bkg_removal, 50)
 
-    # Scale the A3 size img for display
-    image_bkg_removal = resize_image_for_display(image_a3)
-
-    # Display the image
-    cv2.imshow('Foreground', image_bkg_removal)
-
     # Convert to greyscale
-    greyscale_image = cv2.cvtColor(image_bkg_removal, cv2.COLOR_BGR2GRAY)
+    greyscale_image_a3 = cv2.cvtColor(image_a3, cv2.COLOR_BGR2GRAY)
 
-    # Display the image
-    cv2.imshow('Greyscale Image', greyscale_image)
+    # Apply Gaussian blur to reduce noise
+    blurred_image = cv2.GaussianBlur(greyscale_image_a3, (5, 5), 0)
 
     # Apply Canny edge detector
-    edges = cv2.Canny(greyscale_image, threshold1=100, threshold2=200)
-
-    # Display the edges
-    cv2.imshow('Edges', edges)
+    edges_a3 = cv2.Canny(blurred_image, threshold1=15, threshold2=40)
+    cv2.imwrite('edge_a3.jpg', edges_a3)
 
     # Find contours
-    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours, _ = cv2.findContours(edges_a3, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     # Vectorised contours based on user-selected methods
     vectorized_contours = []
@@ -210,18 +199,25 @@ def img_processing(method='n'):
                 continue
 
     # Simplify vectorized contours
-    image_dim = image.shape[:2]  # get img size
+    image_dim = image_a3.shape[:2]  # get img size
     simplified_contours = [adaptive_simplify_vector(contour, image_dim) for contour in vectorized_contours]
-    print(len(vectorized_contours[0]), len(simplified_contours[0]))
 
     # Visualisation of simplified vectorised profiles
-    vectorized_image = np.zeros_like(image_bkg_removal)  # Use the same size as the displayed image
+    vectorized_image_a3 = np.zeros_like(image_a3)  # Use the A3 size image
     for contour in simplified_contours:
         # Ensure the contour coordinates are within the image dimensions
-        contour = np.clip(contour, 0, np.array(image_bkg_removal.shape[:2][::-1]) - 1)
-        cv2.polylines(vectorized_image, [contour], isClosed=False, color=(255, 0, 0), thickness=1)
+        contour = np.clip(contour, 0, np.array(image_a3.shape[:2][::-1]) - 1)
+        cv2.polylines(vectorized_image_a3, [contour], isClosed=False, color=(255, 0, 0), thickness=1)
 
-    cv2.imshow(f'{method.upper()} Vectorized Contours', vectorized_image)
+    # Display the images
+    cv2.imshow('Origin', resize_image_for_display(image))
+    cv2.imshow('Foreground', resize_image_for_display(image_a3))
+    cv2.imshow('Greyscale Image', resize_image_for_display(greyscale_image_a3))
+    cv2.imshow('Edges', resize_image_for_display(edges_a3))
+    cv2.imshow(f'{method.upper()} Vectorized Contours', resize_image_for_display(vectorized_image_a3))
+
+    # Save the original A3 size vectorized image
+    cv2.imwrite(f'img_results/a3_size_img_results/{method.upper()} vectorized_image_a3.jpg', vectorized_image_a3)
 
     # Show images & press 'q' to exit
     cv2.waitKey(0)
