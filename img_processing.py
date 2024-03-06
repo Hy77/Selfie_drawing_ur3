@@ -62,7 +62,7 @@ def resize_and_center_on_a3(image, border_size):
     new_image.paste(resized_image_pil, (x_offset, y_offset))
 
     # Add border
-    border_image = Image.new('RGB', (a3_width + 2 * border_size, a3_height + 2 * border_size), 'white')
+    border_image = Image.new('RGB', (a3_width - 2 * border_size, a3_height - 2 * border_size), 'white')
     border_image.paste(new_image, (border_size, border_size))
 
     # Convert PIL image back to OpenCV format
