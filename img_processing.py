@@ -2,6 +2,82 @@
 import cv2
 import numpy as np
 from scipy.interpolate import interp1d, splprep, splev
+from PIL import Image
+
+
+def remove_background(image):
+    # Create a mask the same size as the image and initialize it with 0
+    mask = np.zeros(image.shape[:2], np.uint8)
+
+    # Create the foreground and background model required by the grabCut algorithm
+    bgdModel = np.zeros((1, 65), np.float64)
+    fgdModel = np.zeros((1, 65), np.float64)
+
+    # Define a rectangular area (starting point and end point) that contains the foreground object
+    rect = (50, 50, image.shape[1] - 100, image.shape[0] - 100)
+
+    # Apply grabCut algorithm
+    cv2.grabCut(image, mask, rect, bgdModel, fgdModel, 5, cv2.GC_INIT_WITH_RECT)
+
+    # Converts background and possible background pixels to 0 and others to 1
+    mask2 = np.where((mask == 2) | (mask == 0), 0, 1).astype('uint8')
+
+    # Remove background using mask
+    image_bkg_removal = image.copy()
+    image_bkg_removal[mask2 == 0] = [255, 255, 255]
+
+    return image_bkg_removal
+
+
+def resize_and_center_on_a3(image, border_size):
+    # A3 size in pixels at 300 dpi
+    a3_width, a3_height = 3508, 4961
+
+    # Convert OpenCV image to PIL format
+    image_pil = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+
+    # Get image dimensions
+    original_width, original_height = image_pil.size
+
+    # Calculate the new size while maintaining the aspect ratio
+    aspect_ratio = original_width / original_height
+    if a3_width / a3_height >= aspect_ratio:
+        new_width = int(a3_height * aspect_ratio)
+        new_height = a3_height
+    else:
+        new_width = a3_width
+        new_height = int(a3_width / aspect_ratio)
+
+    # Resize the image
+    resized_image_pil = image_pil.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+    # Create a new image with a white background
+    new_image = Image.new('RGB', (a3_width, a3_height), 'white')
+
+    # Calculate the position to paste the resized image
+    x_offset = (a3_width - new_width) // 2
+    y_offset = (a3_height - new_height) // 2
+
+    # Paste the resized image onto the center of the new image
+    new_image.paste(resized_image_pil, (x_offset, y_offset))
+
+    # Add border
+    border_image = Image.new('RGB', (a3_width + 2 * border_size, a3_height + 2 * border_size), 'white')
+    border_image.paste(new_image, (border_size, border_size))
+
+    # Convert PIL image back to OpenCV format
+    open_cv_image = cv2.cvtColor(np.array(border_image), cv2.COLOR_RGB2BGR)
+
+    return open_cv_image
+
+
+def resize_image_for_display(image, max_height=800):
+    height, width = image.shape[:2]
+    if height > max_height:
+        scaling_factor = max_height / height
+        resized_image = cv2.resize(image, None, fx=scaling_factor, fy=scaling_factor, interpolation=cv2.INTER_AREA)
+        return resized_image
+    return image
 
 
 # Use can define the img processing method
@@ -14,6 +90,26 @@ def vectorize_contour(contour, method='n'):
         return contour_to_cubic_spline(contour)
     else:
         raise ValueError("Invalid vectorization method. Choose 'n' for nearest neighbor, 'b' for bilinear, or 'c' for bicubic.")
+
+
+def adaptive_simplify_vector(contour, image_dim, min_threshold=5, max_threshold=10):
+    # Calculate the proportion of the outline's bounding box size relative to the image size
+    _, _, w, h = cv2.boundingRect(contour)
+    contour_size_ratio = max(w, h) / max(image_dim)
+
+    # Adaptive threshold setting based on contour size
+    if contour_size_ratio < 1:
+        threshold = min_threshold
+    else:  # If the profile is large, a larger threshold can be used
+        threshold = max_threshold
+
+    # use simplified vector
+    simplified_vector = [contour[0]]  # init vector
+    for point in contour[1:]:
+        if np.linalg.norm(np.array(point) - np.array(simplified_vector[-1])) >= threshold:
+            simplified_vector.append(point)
+
+    return np.array(simplified_vector, dtype=int)
 
 
 def contour_to_nearest_neighbor_vector(contour):
@@ -63,31 +159,8 @@ def contour_to_bilinear_vector(contour, num_points=100):
 
 
 def contour_to_cubic_spline(contour, num_points=100):
-    # 确保轮廓是一个二维数组，并且长度至少为4
-    contour = contour.reshape(-1, 2)
-    if contour.ndim != 2:
-        raise ValueError("Contour is not 2-dimensional or does not have enough points.")
 
-    # 确保没有 NaN 或无穷大的值
-    if np.any(np.isnan(contour)) or np.any(np.isinf(contour)):
-        raise ValueError("Contour contains NaN or infinite values.")
-
-    # 重新塑造轮廓以避免任何潜在的问题
-    x = contour[:, 0]
-    y = contour[:, 1]
-
-    # 参数化轮廓并拟合样条曲线
-    tck, u = splprep([x, y], s=0)
-
-    # 创建等间距的新参数值
-    u_new = np.linspace(0, 1, num_points)
-
-    # 计算新的样条点
-    x_new, y_new = splev(u_new, tck)
-
-    # 将新的点组成轮廓
-    spline_contour = np.vstack((x_new, y_new)).T.astype(int)
-    return spline_contour
+    return contour
 
 
 def img_processing(method='n'):
@@ -97,24 +170,14 @@ def img_processing(method='n'):
     # Show origin img
     cv2.imshow('Origin', image)
 
-    # Create a mask the same size as the image and initialize it with 0
-    mask = np.zeros(image.shape[:2], np.uint8)
+    # Remove background
+    image_bkg_removal = remove_background(image)
 
-    # Create the foreground and background model required by the grabCut algorithm
-    bgdModel = np.zeros((1, 65), np.float64)
-    fgdModel = np.zeros((1, 65), np.float64)
+    # Resize and center on A3
+    image_a3 = resize_and_center_on_a3(image_bkg_removal, 50)
 
-    # Define a rectangular area (starting point and end point) that contains the foreground object
-    rect = (50, 50, image.shape[1] - 100, image.shape[0] - 100)
-
-    # Apply grabCut algorithm
-    cv2.grabCut(image, mask, rect, bgdModel, fgdModel, 5, cv2.GC_INIT_WITH_RECT)
-
-    # Converts background and possible background pixels to 0 and others to 1
-    mask2 = np.where((mask == 2) | (mask == 0), 0, 1).astype('uint8')
-
-    # Remove background using mask
-    image_bkg_removal = image * mask2[:, :, np.newaxis]
+    # Scale the A3 size img for display
+    image_bkg_removal = resize_image_for_display(image_a3)
 
     # Display the image
     cv2.imshow('Foreground', image_bkg_removal)
@@ -142,14 +205,21 @@ def img_processing(method='n'):
                 vectorized_contour = vectorize_contour(contour, method=method)
                 vectorized_contours.append(vectorized_contour)
             except ValueError as e:
-                # 打印错误并跳过这个轮廓
+                # print error & skip this contour
                 print(f"Error processing contour: {e}")
                 continue
 
-    # Visualisation of vectorised profiles
-    vectorized_image = np.zeros_like(image)
-    for vectorized_contour in vectorized_contours:
-        cv2.polylines(vectorized_image, [vectorized_contour], isClosed=False, color=(255, 0, 0), thickness=2)
+    # Simplify vectorized contours
+    image_dim = image.shape[:2]  # get img size
+    simplified_contours = [adaptive_simplify_vector(contour, image_dim) for contour in vectorized_contours]
+    print(len(vectorized_contours[0]), len(simplified_contours[0]))
+
+    # Visualisation of simplified vectorised profiles
+    vectorized_image = np.zeros_like(image_bkg_removal)  # Use the same size as the displayed image
+    for contour in simplified_contours:
+        # Ensure the contour coordinates are within the image dimensions
+        contour = np.clip(contour, 0, np.array(image_bkg_removal.shape[:2][::-1]) - 1)
+        cv2.polylines(vectorized_image, [contour], isClosed=False, color=(255, 0, 0), thickness=1)
 
     cv2.imshow(f'{method.upper()} Vectorized Contours', vectorized_image)
 
