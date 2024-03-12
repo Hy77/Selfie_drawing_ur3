@@ -10,8 +10,8 @@ class SelfieDrawer():
         self.vector = None
         self.tsp_vector = None
 
-    def handle_img_processing(self, image, method, size):
-        self.img_processor.img_processing(image, method, size)
+    def handle_img_processing(self, image, method, size, predictor_path):
+        self.img_processor.img_processing(image, method, size, predictor_path)
 
     def tsp_algo(self):
         return self.tsp_vector
@@ -19,5 +19,5 @@ class SelfieDrawer():
     def ur3_controller(self):
         return
 
-    def run(self, image, method, size):
-        self.handle_img_processing(image, method, size)
+    def run(self, image, method, size, predictor_path):
+        self.handle_img_processing(image, method, size, predictor_path)

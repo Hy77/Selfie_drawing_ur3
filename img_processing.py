@@ -2,29 +2,34 @@
 # img_processing.py
 
 import cv2
+import scipy
 import numpy as np
 from scipy.interpolate import interp1d, splprep, splev
 from PIL import Image
-
+from sense_detector import SenseDetector
 
 class ImgProcessor():
 
     def __init__(self):
+        self.sense_detector = SenseDetector()
         self.n_vector = None
         self.b_vector = None
         self.c_vector = None
 
     # Use can define the img processing method
-    def vectorize_contour(self, contour, method='n'):
-        if method == 'n':  # nearest neighbor
-            return self.contour_to_nearest_neighbor_vector(contour)
-        elif method == 'b':  # bilinear
-            return self.contour_to_bilinear_vector(contour)
-        elif method == 'c':  # bicubic
-            return self.contour_to_cubic_spline(contour)
-        else:
-            raise ValueError(
-                "Invalid vectorization method. Choose 'n' for nearest neighbor, 'b' for bilinear, or 'c' for bicubic.")
+    def vectorize_contour(self, contours, method='n'):
+        vectorized_contours = []
+        for contour in contours:
+            if method == 'n':  # nearest neighbor
+                vectorized_contours.append(self.contour_to_nearest_neighbor_vector(contour))
+            elif method == 'b':  # bilinear
+                vectorized_contours.append(self.contour_to_bilinear_vector(contour))
+            elif method == 'c':  # bicubic
+                vectorized_contours.append(self.contour_to_cubic_spline(contour))
+            else:
+                raise ValueError(
+                    "Invalid vectorization method. Choose 'n' for nearest neighbor, 'b' for bilinear, or 'c' for bicubic.")
+        return vectorized_contours
 
     @staticmethod
     def remove_background(image):
@@ -101,55 +106,76 @@ class ImgProcessor():
             return resized_image
         return image
 
-    # @staticmethod
-    # def adaptive_simplify_vector(contour, image_dim, min_threshold=5, max_threshold=100):
-    #     # Calculate the proportion of the outline's bounding box size relative to the image size
-    #     _, _, w, h = cv2.boundingRect(contour)
-    #     contour_size_ratio = max(w, h) / max(image_dim)
-    #
-    #     # Adaptive threshold setting based on contour size
-    #     if contour_size_ratio < 10:
-    #         threshold = min_threshold
-    #     else:  # If the profile is large, a larger threshold can be used
-    #         threshold = max_threshold
-    #
-    #     # use simplified vector
-    #     simplified_vector = [contour[0]]  # init vector
-    #     for point in contour[1:]:
-    #         if np.linalg.norm(np.array(point) - np.array(simplified_vector[-1])) >= threshold:
-    #             simplified_vector.append(point)
-    #
-    #     return np.array(simplified_vector, dtype=int)
+    def merge_nearby_lines(self, simplified_contour, delta_slope=0.01, delta_intercept=5):
+        if len(simplified_contour) < 3:
+            return simplified_contour.reshape(-1, 2)
+
+        # Convert contour to a list of lines
+        lines = [simplified_contour[i:i + 2] for i in range(len(simplified_contour) - 1)]
+
+        # Group lines by their slope and intercept
+        groups = []
+
+        for line in lines:
+            p1, p2 = line.reshape(4)
+            slope, intercept = self.calculate_slope_intercept(p1, p2)
+
+            # Find an existing group for the line or create a new one
+            found = False
+            for group in groups:
+                if self.is_within_threshold(group, slope, intercept, delta_slope, delta_intercept):
+                    group['lines'].append(line)
+                    group['slopes'].append(slope)
+                    group['intercepts'].append(intercept)
+                    found = True
+                    break
+
+            if not found:
+                groups.append({
+                    'lines': [line],
+                    'slopes': [slope],
+                    'intercepts': [intercept]
+                })
+
+        # Merge lines in each group to create new lines
+        merged_lines = self.merge_line_groups(groups)
+        return merged_lines
+
     @staticmethod
-    def adaptive_simplify_vector(contour, image_dim, min_threshold=3, max_threshold=25, focus_area=None):
-        # Calculate the proportion of the outline's bounding box size relative to the image size
-        _, _, w, h = cv2.boundingRect(contour)
-        contour_size_ratio = max(w, h) / max(image_dim)
+    def calculate_slope_intercept(p1, p2):
+        x1, y1, x2, y2 = p1, p2
+        if x2 - x1 == 0:  # Avoid division by zero for vertical lines
+            slope = float('inf')
+            intercept = x1
+        else:
+            slope = (y2 - y1) / (x2 - x1)
+            intercept = y1 - slope * x1
+        return slope, intercept
 
-        # Determine the center of the image
-        image_center = np.array(image_dim) / 2
+    def is_within_threshold(group, slope, intercept, delta_slope, delta_intercept):
+        mean_slope = np.mean(group['slopes'])
+        mean_intercept = np.mean(group['intercepts'])
+        return (abs(mean_slope - slope) < delta_slope and abs(mean_intercept - intercept) < delta_intercept)
 
-        # Initialize simplified vector with the first point
-        simplified_vector = [contour[0]]
-
-        # Calculate the distance of each contour point from the image center
-        distances_from_center = np.sqrt(((contour - image_center) ** 2).sum(axis=1))
-
-        # Decide on the threshold based on the position of the contour point
-        for point, distance in zip(contour[1:], distances_from_center[1:]):
-            print(distance, contour_size_ratio)
-            if focus_area is not None and distance <= focus_area:
-                threshold = min_threshold
+    @staticmethod
+    def merge_line_groups(groups):
+        merged_lines = []
+        for group in groups:
+            if len(group['lines']) > 1:  # Only merge if there are at least 2 lines in the group
+                # Extract all the start and end points of the lines
+                all_points = np.vstack(group['lines']).reshape(-1, 2)
+                # Find the average start and end points
+                avg_start = np.mean(all_points[::2], axis=0)
+                avg_end = np.mean(all_points[1::2], axis=0)
+                # Create a new line from the average start and end points
+                merged_lines.append(np.vstack([avg_start, avg_end]).astype(int))
             else:
-                threshold = max_threshold
-            if np.linalg.norm(np.array(point) - np.array(simplified_vector[-1])) >= threshold:
-                simplified_vector.append(point)
+                # If there's only one line in the group, keep it as it is
+                merged_lines.append(group['lines'][0])
 
-        # Ensure the final contour is closed
-        if not np.array_equal(simplified_vector[0], simplified_vector[-1]):
-            simplified_vector.append(simplified_vector[0])
-
-        return np.array(simplified_vector, dtype=np.int32)
+        # Convert list of lines back into a contour array
+        merged_contour = np.vstack(merged_lines).reshape(-1, 1, 2)
+        return merged_contour
 
     def contour_to_nearest_neighbor_vector(self, contour):
         # Make sure the outline is a two-dimensional array
@@ -176,6 +202,10 @@ class ImgProcessor():
         return self.n_vector
 
     def contour_to_bilinear_vector(self, contour, num_points=100):
+        # Ensure the contour has at least three points for interpolation
+        if len(contour) < 3:
+            return contour
+
         # Make sure the outline is a two-dimensional array
         contour = contour.reshape(-1, 2)
         x = np.array(contour[:, 0])
@@ -203,71 +233,90 @@ class ImgProcessor():
         self.c_vector = contour
         return self.c_vector
 
-    def img_processing(self, image, method, size):
+    def process_contours(self, contours, facial_contours, method):
+        # Combine facial feature contours into one list
+        facial_feature_points = []
+        for face in facial_contours:
+            for feature, points in face.items():
+                facial_feature_points.extend(points)
+
+        # Convert facial feature points to a NumPy array
+        facial_feature_points = np.array(facial_feature_points)
+
+        # Process each contour
+        processed_contours = []
+        for contour in contours:
+            if len(contour) > 3:
+                # Check if the contour is part of the facial features
+                if self.is_contour_in_facial_features(contour, facial_feature_points):
+                    # Keep the contour as it is
+                    processed_contours.append(contour)
+                else:
+                    # Simplify the contour
+                    try:
+                        simplified_contour = cv2.approxPolyDP(contour, 10, True)
+                        processed_contours.extend(simplified_contour)
+                        ''' Find somehow to merge the similar lines
+                        # Ensure we have enough points to form lines
+                        if len(simplified_contour) > 1:
+                            print(len(simplified_contour))
+                            merged_simplified_contour = self.merge_nearby_lines(simplified_contour)
+                            processed_contours.extend(merged_simplified_contour)
+                        else:
+                            # If not enough points, skip this contour
+                            continue
+                        '''
+                    except ValueError as e:
+                        # Print error & skip this contour
+                        print(f"Error processing contour: {e}")
+                        continue
+        return processed_contours
+
+    @staticmethod
+    def is_contour_in_facial_features(contour, facial_feature_points):
+        # Check if any point in the contour is close to a facial feature point
+        for point in contour.reshape(-1, 2):
+            if np.min(np.linalg.norm(facial_feature_points - point, axis=1)) < 5:
+                return True
+        return False
+
+    def img_processing(self, image, method, size, predictor_path):
 
         # Remove background
         image_bkg_removal = self.remove_background(image)
 
-        # Resize and center on A3
-        image_a3 = self.resize_and_center_on_a3(image_bkg_removal, 50)
-
-        # define the threshold for Canny edge detector
-        th1 = 100
-        th2 = 200
-        # check if we proceed with origin img or a3 img
-        if size == 'a3':
-            processed_image = image_a3
-            th1 = 15
-            th2 = 40
-        else:
-            processed_image = image_bkg_removal
-
         # Convert to greyscale
-        greyscale_image = cv2.cvtColor(processed_image, cv2.COLOR_BGR2GRAY)
+        greyscale_image = cv2.cvtColor(image_bkg_removal, cv2.COLOR_BGR2GRAY)
+
+        # Detect facial features
+        facial_contours = self.sense_detector.detect_senses(predictor_path, greyscale_image)
 
         # Apply Canny edge detector
-        edges = cv2.Canny(greyscale_image, threshold1=th1, threshold2=th2)
-        # cv2.imwrite(f'edge_{size}.jpg', edges)
+        edges = cv2.Canny(greyscale_image, threshold1=100, threshold2=200)
 
         # Find contours
         contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-        # Vectorised contours based on user-selected methods
-        vectorized_contours = []
-        for contour in contours:
-            if len(contour) > 3:
-                try:
-                    vectorized_contour = self.vectorize_contour(contour, method=method)
-                    vectorized_contours.append(vectorized_contour)
-                except ValueError as e:
-                    # print error & skip this contour
-                    print(f"Error processing contour: {e}")
-                    continue
+        # Process contours
+        processed_contours = self.process_contours(contours, facial_contours, method)
 
-        # Simplify vectorized contours
-        image_dim = processed_image.shape[:2]  # get img size
-        focused_simplified_contours = [self.adaptive_simplify_vector(contour, image_dim, focus_area=120) for contour in
-                                       vectorized_contours]
+        # custom vectorized contours
+        custom_vectorized_contours = self.vectorize_contour(processed_contours, method)
 
         # Visualisation of simplified vectorised profiles
-        vectorized_image = np.zeros_like(processed_image)  # Use the A3 size image
-        for contour in focused_simplified_contours:
+        vectorized_image = np.zeros_like(image)
+        for contour in custom_vectorized_contours:
             # Ensure the contour coordinates are within the image dimensions
-            contour = np.clip(contour, 0, np.array(processed_image.shape[:2][::-1]) - 1)
+            contour = np.clip(contour, 0, np.array(image.shape[:2][::-1]) - 1)
             cv2.polylines(vectorized_image, [contour], isClosed=False, color=(255, 255, 255), thickness=1)
 
         # Display the images
         # cv2.imshow('Origin', self.resize_image_for_display(image))
         # cv2.imshow('Foreground', self.resize_image_for_display(processed_image))
         # cv2.imshow('Greyscale Image', self.resize_image_for_display(greyscale_image))
-        if size == 'a3':
-            cv2.imshow('Greyscale Image', self.resize_image_for_display(greyscale_image))
-            cv2.imshow('Edges', self.resize_image_for_display(edges))
-            cv2.imshow(f'{method.upper()} Vectorized Contours', self.resize_image_for_display(vectorized_image))
-        else:
-            cv2.imshow('Greyscale Image', greyscale_image)
-            cv2.imshow('Edges', edges)
-            cv2.imshow(f'{method.upper()} Vectorized Contours', vectorized_image)
+        cv2.imshow('Greyscale Image', greyscale_image)
+        cv2.imshow('Edges', edges)
+        cv2.imshow(f'{method.upper()} Vectorized Contours', vectorized_image)
 
         # Save the original A3 size vectorized image
         cv2.imwrite(f'img_results/a3_size_img_results/{method.upper()} vectorized_image_a3.jpg', vectorized_image)
