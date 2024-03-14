@@ -68,7 +68,26 @@ This guide will help you set up a UR3 robot simulator using Gazebo, MoveIt, and 
    ```bash
    ./ur3_move.py
    ```
+## Running on the real UR3
 
+1. Connect to the UR3
+   ```bash
+   roslaunch ur_robot_driver ur3_bringup.launch robot_ip:=192.168.0.250
+   ```
+2. Turn on MoveIt
+   ```commandline
+   roslaunch ur3_moveit_config moveit_planning_execution.launch 
+   ```
+3. Turn on Rviz
+   ```commandline
+   roslaunch ur3_moveit_config moveit_rviz.launch config:=true
+   ```
+
+4. Run the Rospkg & codes
+   ```commandline
+   rosrun selfie_drawer_pkg ur3_move.py
+   ```
+   
 ## Notes
 
 - Make sure to source your ROS environment before running any ROS commands:
