@@ -2,16 +2,18 @@
 # img_processing.py
 
 import cv2
-import scipy
 import numpy as np
 from scipy.interpolate import interp1d, splprep, splev
 from PIL import Image
 from sense_detector import SenseDetector
+import cv2.ximgproc as ximgproc
 
 class ImgProcessor():
 
     def __init__(self):
         self.sense_detector = SenseDetector()
+        self.image = None
+        self.non_facial_contours = []
         self.n_vector = None
         self.b_vector = None
         self.c_vector = None
@@ -106,77 +108,6 @@ class ImgProcessor():
             return resized_image
         return image
 
-    def merge_nearby_lines(self, simplified_contour, delta_slope=0.01, delta_intercept=5):
-        if len(simplified_contour) < 3:
-            return simplified_contour.reshape(-1, 2)
-
-        # Convert contour to a list of lines
-        lines = [simplified_contour[i:i + 2] for i in range(len(simplified_contour) - 1)]
-
-        # Group lines by their slope and intercept
-        groups = []
-
-        for line in lines:
-            p1, p2 = line.reshape(4)
-            slope, intercept = self.calculate_slope_intercept(p1, p2)
-
-            # Find an existing group for the line or create a new one
-            found = False
-            for group in groups:
-                if self.is_within_threshold(group, slope, intercept, delta_slope, delta_intercept):
-                    group['lines'].append(line)
-                    group['slopes'].append(slope)
-                    group['intercepts'].append(intercept)
-                    found = True
-                    break
-
-            if not found:
-                groups.append({
-                    'lines': [line],
-                    'slopes': [slope],
-                    'intercepts': [intercept]
-                })
-
-        # Merge lines in each group to create new lines
-        merged_lines = self.merge_line_groups(groups)
-        return merged_lines
-
-    @staticmethod
-    def calculate_slope_intercept(p1, p2):
-        x1, y1, x2, y2 = p1, p2
-        if x2 - x1 == 0:  # Avoid division by zero for vertical lines
-            slope = float('inf')
-            intercept = x1
-        else:
-            slope = (y2 - y1) / (x2 - x1)
-            intercept = y1 - slope * x1
-        return slope, intercept
-
-    def is_within_threshold(group, slope, intercept, delta_slope, delta_intercept):
-        mean_slope = np.mean(group['slopes'])
-        mean_intercept = np.mean(group['intercepts'])
-        return (abs(mean_slope - slope) < delta_slope and abs(mean_intercept - intercept) < delta_intercept)
-
-    @staticmethod
-    def merge_line_groups(groups):
-        merged_lines = []
-        for group in groups:
-            if len(group['lines']) > 1:  # Only merge if there are at least 2 lines in the group
-                # Extract all the start and end points of the lines
-                all_points = np.vstack(group['lines']).reshape(-1, 2)
-                # Find the average start and end points
-                avg_start = np.mean(all_points[::2], axis=0)
-                avg_end = np.mean(all_points[1::2], axis=0)
-                # Create a new line from the average start and end points
-                merged_lines.append(np.vstack([avg_start, avg_end]).astype(int))
-            else:
-                # If there's only one line in the group, keep it as it is
-                merged_lines.append(group['lines'][0])
-
-        # Convert list of lines back into a contour array
-        merged_contour = np.vstack(merged_lines).reshape(-1, 1, 2)
-        return merged_contour
-
     def contour_to_nearest_neighbor_vector(self, contour):
         # Make sure the outline is a two-dimensional array
         contour = contour.reshape(-1, 2)
@@ -202,6 +133,9 @@ class ImgProcessor():
         return self.n_vector
 
     def contour_to_bilinear_vector(self, contour, num_points=100):
+        # Convert the contour to a NumPy array
+        contour = np.array(contour)
+
         # Ensure the contour has at least three points for interpolation
         if len(contour) < 3:
             return contour
@@ -233,6 +167,39 @@ class ImgProcessor():
         self.c_vector = contour
         return self.c_vector
 
+    @staticmethod
+    def simplify_contour(contour, threshold):
+        simplified_vector = [contour[0]]
+        for point in contour[1:]:
+            if np.linalg.norm(point - simplified_vector[-1]) >= threshold:
+                simplified_vector.append(point)
+
+        return np.array(simplified_vector)
+
+    def process_and_blur_contours(self, contours, blur_ksize=17):
+        # Create a blank image, the same size as the original image
+        blank_image = np.zeros((self.image.shape[0], self.image.shape[1]), dtype=np.uint8)
+
+        # Drawing contours on the blank image
+        for contour in contours:
+            if isinstance(contour, list):
+                # convert contour -> array
+                contour = np.array(contour, dtype=np.int32)
+            if contour.shape[0] > 0:
+                # Reshape contours to ensure correct shape
+                reshaped_contour = contour.reshape(-1, 1, 2)
+                cv2.drawContours(blank_image, [reshaped_contour], -1, 255, 1)
+
+        # Use Gaussian blur
+        blurred_image = cv2.GaussianBlur(blank_image, (blur_ksize, blur_ksize), 0)
+        # cv2.imshow('Blurred Image', blurred_image)
+        adjusted_img = cv2.convertScaleAbs(blurred_image, alpha=5.0, beta=0)
+        # cv2.imshow('Adjusted Image', adjusted_img)
+        thinned_image = ximgproc.thinning(adjusted_img)
+        # cv2.imshow('Thinned Image', thinned_image)
+
+        return thinned_image
+
     def process_contours(self, contours, facial_contours, method):
         # Combine facial feature contours into one list
         facial_feature_points = []
@@ -246,6 +213,8 @@ class ImgProcessor():
         # Process each contour
         processed_contours = []
         for contour in contours:
+            # print(f"Contour shape: {contour.shape}")
+            # print(f"Contour:\n{contour}")
             if len(contour) > 3:
                 # Check if the contour is part of the facial features
                 if self.is_contour_in_facial_features(contour, facial_feature_points):
@@ -254,33 +223,28 @@ class ImgProcessor():
                 else:
                     # Simplify the contour
                     try:
-                        simplified_contour = cv2.approxPolyDP(contour, 10, True)
-                        processed_contours.extend(simplified_contour)
-                        ''' Find somehow to merge the similar lines
-                        # Ensure we have enough points to form lines
-                        if len(simplified_contour) > 1:
-                            print(len(simplified_contour))
-                            merged_simplified_contour = self.merge_nearby_lines(simplified_contour)
-                            processed_contours.extend(merged_simplified_contour)
-                        else:
-                            # If not enough points, skip this contour
-                            continue
-                        '''
+                        simp_contours = self.simplify_contour(contour, 30)
+                        # blured_contours = self.process_and_blur_contours(simp_contours, 30)
+                        self.non_facial_contours.append(simp_contours)
                     except ValueError as e:
                         # Print error & skip this contour
                         print(f"Error processing contour: {e}")
                         continue
+
         return processed_contours
 
     @staticmethod
     def is_contour_in_facial_features(contour, facial_feature_points):
         # Check if any point in the contour is close to a facial feature point
         for point in contour.reshape(-1, 2):
-            if np.min(np.linalg.norm(facial_feature_points - point, axis=1)) < 5:
+            if np.min(np.linalg.norm(facial_feature_points - point, axis=1)) < 3:
                 return True
         return False
 
     def img_processing(self, image, method, size, predictor_path):
+
+        # restore img info
+        self.image = image
 
         # Remove background
         image_bkg_removal = self.remove_background(image)
@@ -303,12 +267,19 @@ class ImgProcessor():
         # custom vectorized contours
         custom_vectorized_contours = self.vectorize_contour(processed_contours, method)
 
-        # Visualisation of simplified vectorised profiles
-        vectorized_image = np.zeros_like(image)
+        '''
+        1. Origin img -> bkg removal -> greyscale -> find edge -> find contours
+        2. Get senses area -> separate contours to 2.1 facial and 2.2 non_facial
+        3. keep facial's contours detail & blur non_facial contours img
+        4. Increase non_facial img contrast & use ximgproc.thinning() to get line's 'skeleton'
+        5. Save the non_facial img & draw the facial's contours on that img
+        '''
+        # Use non_facial img as the base
+        non_facial_image = self.process_and_blur_contours(self.non_facial_contours)
         for contour in custom_vectorized_contours:
             # Ensure the contour coordinates are within the image dimensions
             contour = np.clip(contour, 0, np.array(image.shape[:2][::-1]) - 1)
-            cv2.polylines(vectorized_image, [contour], isClosed=False, color=(255, 255, 255), thickness=1)
+            cv2.polylines(non_facial_image, [contour], isClosed=False, color=(255, 255, 255), thickness=1)
 
         # Display the images
         # cv2.imshow('Origin', self.resize_image_for_display(image))
@@ -316,10 +287,10 @@ class ImgProcessor():
         # cv2.imshow('Greyscale Image', self.resize_image_for_display(greyscale_image))
         cv2.imshow('Greyscale Image', greyscale_image)
         cv2.imshow('Edges', edges)
-        cv2.imshow(f'{method.upper()} Vectorized Contours', vectorized_image)
+        cv2.imshow(f'{method.upper()} Vectorized Contours', non_facial_image)
 
         # Save the original A3 size vectorized image
-        cv2.imwrite(f'img_results/a3_size_img_results/{method.upper()} vectorized_image_a3.jpg', vectorized_image)
+        cv2.imwrite(f'img_results/a3_size_img_results/{method.upper()} vectorized_image_a3.jpg', non_facial_image)
 
         # Show images & press 'q' to exit
         cv2.waitKey(0)

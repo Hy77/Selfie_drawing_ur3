@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# img_processing.py
+# img_processing_old_ver.py
 
 # This will assume the senses' position and use diff threshold to simplify the contour
 
@@ -10,7 +10,7 @@ from scipy.interpolate import interp1d, splprep, splev
 from PIL import Image
 from sense_detector import SenseDetector
 
-class ImgProcessor():
+class ImgProcessor_old():
 
     def __init__(self):
         self.sense_detector = SenseDetector
