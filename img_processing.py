@@ -8,6 +8,7 @@ from PIL import Image
 from sense_detector import SenseDetector
 import cv2.ximgproc as ximgproc
 
+
 class ImgProcessor():
 
     def __init__(self):
@@ -17,6 +18,7 @@ class ImgProcessor():
         self.n_vector = None
         self.b_vector = None
         self.c_vector = None
+        self.final_contours = []
 
     # Use can define the img processing method
     def vectorize_contour(self, contours, method='n'):
@@ -276,6 +278,10 @@ class ImgProcessor():
         '''
         # Use non_facial img as the base
         non_facial_image = self.process_and_blur_contours(self.non_facial_contours)
+        non_facial_contours, _ = cv2.findContours(non_facial_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        self.final_contours = custom_vectorized_contours + non_facial_contours
+        if self.final_contours is not None:
+            self.update_final_contours()  # Update final contours
         for contour in custom_vectorized_contours:
             # Ensure the contour coordinates are within the image dimensions
             contour = np.clip(contour, 0, np.array(image.shape[:2][::-1]) - 1)
@@ -296,3 +302,6 @@ class ImgProcessor():
         cv2.waitKey(0)
         if cv2.waitKey(0) & 0xFF == ord('q'):
             cv2.destroyAllWindows()
+
+    def update_final_contours(self):
+        return self.final_contours
