@@ -19,6 +19,7 @@ class ImgProcessor():
         self.b_vector = None
         self.c_vector = None
         self.final_contours = []
+        self.final_image = None
 
     # Use can define the img processing method
     def vectorize_contour(self, contours, method='n'):
@@ -280,13 +281,11 @@ class ImgProcessor():
         non_facial_image = self.process_and_blur_contours(self.non_facial_contours)
         non_facial_contours, _ = cv2.findContours(non_facial_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         self.final_contours = custom_vectorized_contours + non_facial_contours
-        if self.final_contours is not None:
-            self.update_final_contours()  # Update final contours
         for contour in custom_vectorized_contours:
             # Ensure the contour coordinates are within the image dimensions
             contour = np.clip(contour, 0, np.array(image.shape[:2][::-1]) - 1)
             cv2.polylines(non_facial_image, [contour], isClosed=False, color=(255, 255, 255), thickness=1)
-
+        self.final_image = non_facial_image
         # Display the images
         # cv2.imshow('Origin', self.resize_image_for_display(image))
         # cv2.imshow('Foreground', self.resize_image_for_display(processed_image))
@@ -296,7 +295,7 @@ class ImgProcessor():
         cv2.imshow(f'{method.upper()} Vectorized Contours', non_facial_image)
 
         # Save the original A3 size vectorized image
-        cv2.imwrite(f'img_results/a3_size_img_results/{method.upper()} vectorized_image_a3.jpg', non_facial_image)
+        # cv2.imwrite(f'img_results/a3_size_img_results/{method.upper()} vectorized_image_a3.jpg', non_facial_image)
 
         # Show images & press 'q' to exit
         cv2.waitKey(0)
