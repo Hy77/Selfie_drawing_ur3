@@ -4,12 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="ffb29561-02ef-4074-92cb-1c51790b2539" name="Changes" comment="selfie_drawing_ur3">
-      <change beforePath="$PROJECT_DIR$/../Selfie_drawing_ur3/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../Selfie_drawing_ur3/.idea/misc.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../Selfie_drawing_ur3/.idea/selfie_drawing_ur3.iml" beforeDir="false" afterPath="$PROJECT_DIR$/../Selfie_drawing_ur3/.idea/selfie_drawing_ur3.iml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../Selfie_drawing_ur3/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../Selfie_drawing_ur3/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../Selfie_drawing_ur3/img_processing.py" beforeDir="false" afterPath="$PROJECT_DIR$/../Selfie_drawing_ur3/img_processing.py" afterDir="false" />
-    </list>
+    <list default="true" id="ffb29561-02ef-4074-92cb-1c51790b2539" name="Changes" comment="selfie_drawing_ur3" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -28,7 +23,7 @@
         <option value="haiyang &lt;tedsun7@gmail.com&gt;" />
       </list>
     </option>
-    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/../Selfie_drawing_ur3" />
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
   <component name="GitHubPullRequestSearchHistory">{
   &quot;lastFilter&quot;: {
@@ -66,7 +61,7 @@
     "ASKED_ADD_EXTERNAL_FILES": "true",
     "RunOnceActivity.OpenProjectViewOnStart": "true",
     "RunOnceActivity.ShowReadmeOnStart": "true",
-    "git-widget-placeholder": "master",
+    "git-widget-placeholder": "main",
     "last_opened_file_path": "/home/haiyang/roboticstudio2/src/selfie_drawer_pkg/selfie_drawing_ur3",
     "settings.editor.selected.configurable": "com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable"
   }

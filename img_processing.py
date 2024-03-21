@@ -248,6 +248,7 @@ class ImgProcessor():
 
         # restore img info
         self.image = image
+        drawing_img = np.zeros_like(image)
 
         # Remove background
         image_bkg_removal = self.remove_background(image)
@@ -280,27 +281,29 @@ class ImgProcessor():
         # Use non_facial img as the base
         non_facial_image = self.process_and_blur_contours(self.non_facial_contours)
         non_facial_contours, _ = cv2.findContours(non_facial_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        self.final_contours = custom_vectorized_contours + non_facial_contours
-        for contour in custom_vectorized_contours:
+
+        # Concatenate the two lists
+        custom_vectorized_contours.extend(non_facial_contours)
+        self.final_contours = custom_vectorized_contours
+
+        for contour in self.final_contours:
             # Ensure the contour coordinates are within the image dimensions
             contour = np.clip(contour, 0, np.array(image.shape[:2][::-1]) - 1)
-            cv2.polylines(non_facial_image, [contour], isClosed=False, color=(255, 255, 255), thickness=1)
-        self.final_image = non_facial_image
+            cv2.polylines(drawing_img, [contour], isClosed=False, color=(255, 255, 255), thickness=1)
+        self.final_image = drawing_img
         # Display the images
         # cv2.imshow('Origin', self.resize_image_for_display(image))
         # cv2.imshow('Foreground', self.resize_image_for_display(processed_image))
         # cv2.imshow('Greyscale Image', self.resize_image_for_display(greyscale_image))
         cv2.imshow('Greyscale Image', greyscale_image)
         cv2.imshow('Edges', edges)
-        cv2.imshow(f'{method.upper()} Vectorized Contours', non_facial_image)
+        cv2.imshow(f'{method.upper()} Vectorized Contours', drawing_img)
 
         # Save the original A3 size vectorized image
         # cv2.imwrite(f'img_results/a3_size_img_results/{method.upper()} vectorized_image_a3.jpg', non_facial_image)
 
         # Show images & press 'q' to exit
-        cv2.waitKey(0)
-        if cv2.waitKey(0) & 0xFF == ord('q'):
-            cv2.destroyAllWindows()
+        # cv2.waitKey(0)
 
     def update_final_contours(self):
         return self.final_contours
