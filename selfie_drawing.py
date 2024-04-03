@@ -1,15 +1,20 @@
 from img_processing import ImgProcessor
 from toolpathing import PathPlanner
 from paper_detector import PaperDetector
+from ur3_move import UR3_Control
 import rospy
 from sensor_msgs.msg import Image
 from message_filters import ApproximateTimeSynchronizer, Subscriber
+
 
 class SelfieDrawer:
     def __init__(self, image, method, size, predictor_path):
         self.img_processor = ImgProcessor()
         self.path_planner = PathPlanner
         self.paper_detector = PaperDetector()
+        self.ur3_controller = UR3_Control()
+        self.paper_local_info = None
+        self.paper_global_info = None
         self.image = image
         self.method = method
         self.size = size
@@ -24,10 +29,28 @@ class SelfieDrawer:
         self.final_contours = self.img_processor.final_contours
         self.final_image = self.img_processor.final_image
 
+    def define_cam_ee(self):
+        return
+
+    def define_pen_ee(self):
+        return
+
+    def define_paper_global_coord(self):
+        self.paper_global_info = self.paper_detector.paper_info
+
     def tsp_algo(self):
         self.final_contour_updator()  # update final_contours & image
         self.path_planner = PathPlanner(self.final_contours, self.final_image)
         self.path_planner.visualization()
+
+    def start_drawing(self):
+        self.paper_local_info = self.paper_detector.paper_info  # update paper local info
+        self.paper_global_info = self.ur3_controller.define_paper_global_coord(self.paper_local_info)  # convert to glb
+        self.ur3_controller.run(self.paper_global_info)  # let ur3 to reach 4 corners of the paper
+        self.handle_img_processing()  # run img processing & get contours
+        self.final_contour_updator()  # update the final contours
+        self.tsp_algo()  # run tsp algo get effective path
+        # TODO: control ur3 to move to these coordinates
 
     def callback(self, msg_color, msg_depth):
         try:
@@ -35,16 +58,17 @@ class SelfieDrawer:
             self.paper_detector.paper_detection()
             if self.paper_detector.paper_found:
                 rospy.signal_shutdown('Paper found.')
-                self.handle_img_processing()
-                self.final_contour_updator()
-                self.tsp_algo()
+                self.start_drawing()
         except Exception as e:
             print(f"Error in callback: {e}")
 
     def run(self):
+        self.start_drawing()
+        ''' # Run RGB-D camera to get paper info then start img processing & drawing etc
         rospy.init_node('selfie_drawer_node', anonymous=True)
         sub_color = Subscriber("/camera/color/image_raw", Image)
         sub_depth = Subscriber("/camera/depth/image_rect_raw", Image)
         ats = ApproximateTimeSynchronizer([sub_color, sub_depth], queue_size=5, slop=0.1)
         ats.registerCallback(self.callback)
         rospy.spin()
+        '''
