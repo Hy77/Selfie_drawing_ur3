@@ -61,9 +61,9 @@ class ImgProcessor():
         return image_bkg_removal
 
     @staticmethod
-    def resize_and_center_on_a3(image, border_size):
-        # A3 size in pixels at 300 dpi
-        a3_width, a3_height = 3508, 4961
+    def resize_and_center_on_a4_img(image, border_size):
+        # A4 size in pixels at 300 dpi
+        a4_width, a4_height = 2480, 3508
 
         # Convert OpenCV image to PIL format
         image_pil = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
@@ -73,28 +73,28 @@ class ImgProcessor():
 
         # Calculate the new size while maintaining the aspect ratio
         aspect_ratio = original_width / original_height
-        if a3_width / a3_height >= aspect_ratio:
-            new_width = int(a3_height * aspect_ratio)
-            new_height = a3_height
+        if a4_width / a4_height >= aspect_ratio:
+            new_width = int(a4_height * aspect_ratio)
+            new_height = a4_height
         else:
-            new_width = a3_width
-            new_height = int(a3_width / aspect_ratio)
+            new_width = a4_width
+            new_height = int(a4_width / aspect_ratio)
 
         # Resize the image
         resized_image_pil = image_pil.resize((new_width, new_height), Image.Resampling.LANCZOS)
 
         # Create a new image with a white background
-        new_image = Image.new('RGB', (a3_width, a3_height), 'white')
+        new_image = Image.new('RGB', (a4_width, a4_height), 'white')
 
         # Calculate the position to paste the resized image
-        x_offset = (a3_width - new_width) // 2
-        y_offset = (a3_height - new_height) // 2
+        x_offset = (a4_width - new_width) // 2
+        y_offset = (a4_height - new_height) // 2
 
         # Paste the resized image onto the center of the new image
         new_image.paste(resized_image_pil, (x_offset, y_offset))
 
         # Add border
-        border_image = Image.new('RGB', (a3_width - 2 * border_size, a3_height - 2 * border_size), 'white')
+        border_image = Image.new('RGB', (a4_width - 2 * border_size, a4_height - 2 * border_size), 'white')
         border_image.paste(new_image, (border_size, border_size))
 
         # Convert PIL image back to OpenCV format
@@ -103,13 +103,10 @@ class ImgProcessor():
         return open_cv_image
 
     @staticmethod
-    def resize_image_for_display(image, max_height=800):
-        height, width = image.shape[:2]
-        if height > max_height:
-            scaling_factor = max_height / height
-            resized_image = cv2.resize(image, None, fx=scaling_factor, fy=scaling_factor, interpolation=cv2.INTER_AREA)
-            return resized_image
-        return image
+    def cv2_imshow_resize_image_for_display(image_name, image):
+        cv2.namedWindow(image_name, cv2.WINDOW_NORMAL)
+        cv2.resizeWindow(image_name, 600, 850)
+        cv2.imshow(image_name, image)
 
     def contour_to_nearest_neighbor_vector(self, contour):
         # Make sure the outline is a two-dimensional array
@@ -244,11 +241,7 @@ class ImgProcessor():
                 return True
         return False
 
-    def img_processing(self, image, method, size, predictor_path):
-
-        # restore img info
-        self.image = image
-        drawing_img = np.zeros_like(image)
+    def img_processing(self, image, method, predictor_path):
 
         # Remove background
         image_bkg_removal = self.remove_background(image)
@@ -256,17 +249,56 @@ class ImgProcessor():
         # Convert to greyscale
         greyscale_image = cv2.cvtColor(image_bkg_removal, cv2.COLOR_BGR2GRAY)
 
+        # convert the img to a4 size paper
+        a4_size_img = self.resize_and_center_on_a4_img(greyscale_image, 50)
+        a4_drawing_board = np.zeros_like(a4_size_img)
+        self.image = a4_size_img  # restore img info
+        self.cv2_imshow_resize_image_for_display('A4 Image', a4_size_img)
+
         # Detect facial features
-        facial_contours = self.sense_detector.detect_senses(predictor_path, greyscale_image)
+        facial_contours = self.sense_detector.detect_senses(predictor_path, a4_size_img)
 
         # Apply Canny edge detector
         edges = cv2.Canny(greyscale_image, threshold1=100, threshold2=200)
 
-        # Find contours
+        # 找到边缘图像中的轮廓
         contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
+        # 计算缩放比例
+        a4_width, a4_height = 2480, 3508
+        # Get image dimensions
+        image_pil = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+        original_width, original_height = image_pil.size
+        # 计算等比例缩放后的尺寸和偏移量
+        aspect_ratio = original_width / original_height
+        if a4_width / a4_height >= aspect_ratio:
+            new_width = int(a4_height * aspect_ratio)
+            new_height = a4_height
+        else:
+            new_width = a4_width
+            new_height = int(a4_width / aspect_ratio)
+
+        scale_width = new_width / original_width
+        scale_height = new_height / original_height
+
+        x_offset = (a4_width - new_width) // 2
+        y_offset = (a4_height - new_height) // 2
+
+        # 调整轮廓点的坐标
+        scaled_contours = []
+        for contour in contours:
+            scaled_contour = [(int(x * scale_width) + x_offset, int(y * scale_height) + y_offset) for x, y in
+                              contour.reshape(-1, 2)]
+            scaled_contours.append(np.array(scaled_contour, dtype=np.int32))
+
+        # 在 A4 尺寸的画布上绘制调整后的轮廓
+        a4_canvas = np.zeros((a4_height, a4_width, 3), dtype=np.uint8)
+        for contour in scaled_contours:
+            cv2.polylines(a4_canvas, [contour], isClosed=False, color=(255, 255, 255), thickness=1)
+        self.cv2_imshow_resize_image_for_display('Contours on A4', a4_canvas)
+
         # Process contours
-        processed_contours = self.process_contours(contours, facial_contours, method)
+        processed_contours = self.process_contours(scaled_contours, facial_contours, method)
 
         # custom vectorized contours
         custom_vectorized_contours = self.vectorize_contour(processed_contours, method)
@@ -289,21 +321,19 @@ class ImgProcessor():
         for contour in self.final_contours:
             # Ensure the contour coordinates are within the image dimensions
             contour = np.clip(contour, 0, np.array(image.shape[:2][::-1]) - 1)
-            cv2.polylines(drawing_img, [contour], isClosed=False, color=(255, 255, 255), thickness=1)
-        self.final_image = drawing_img
+            cv2.polylines(a4_drawing_board, [contour], isClosed=False, color=(255, 255, 255), thickness=1)
+        self.final_image = a4_drawing_board
         # Display the images
-        # cv2.imshow('Origin', self.resize_image_for_display(image))
-        # cv2.imshow('Foreground', self.resize_image_for_display(processed_image))
-        # cv2.imshow('Greyscale Image', self.resize_image_for_display(greyscale_image))
-        cv2.imshow('Greyscale Image', greyscale_image)
-        cv2.imshow('Edges', edges)
-        cv2.imshow(f'{method.upper()} Vectorized Contours', drawing_img)
+        self.cv2_imshow_resize_image_for_display('Greyscale Image', greyscale_image)
+        self.cv2_imshow_resize_image_for_display('Edges', edges)
+        self.cv2_imshow_resize_image_for_display(f'{method.upper()} Vectorized Contours', a4_drawing_board)
 
         # Save the original A3 size vectorized image
         # cv2.imwrite(f'img_results/a3_size_img_results/{method.upper()} vectorized_image_a3.jpg', non_facial_image)
 
-        # Show images & press 'q' to exit
-        # cv2.waitKey(0)
+        # Wait for a key press and close windows if 'q' is pressed
+        if cv2.waitKey(0) & 0xFF == ord('q'):
+            cv2.destroyAllWindows()
 
     def update_final_contours(self):
         return self.final_contours

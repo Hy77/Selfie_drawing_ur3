@@ -8,32 +8,25 @@ from message_filters import ApproximateTimeSynchronizer, Subscriber
 
 
 class SelfieDrawer:
-    def __init__(self, image, method, size, predictor_path):
+    def __init__(self, image, method, predictor_path):
         self.img_processor = ImgProcessor()
         self.path_planner = PathPlanner
         self.paper_detector = PaperDetector()
-        self.ur3_controller = UR3_Control()
+        # self.ur3_controller = UR3_Control()
         self.paper_local_info = None
         self.paper_global_info = None
         self.image = image
         self.method = method
-        self.size = size
         self.predictor_path = predictor_path
         self.final_contours = []
         self.final_image = None
 
     def handle_img_processing(self):
-        self.img_processor.img_processing(self.image, self.method, self.size, self.predictor_path)
+        self.img_processor.img_processing(self.image, self.method, self.predictor_path)
 
     def final_contour_updator(self):
         self.final_contours = self.img_processor.final_contours
         self.final_image = self.img_processor.final_image
-
-    def define_cam_ee(self):
-        return
-
-    def define_pen_ee(self):
-        return
 
     def define_paper_global_coord(self):
         self.paper_global_info = self.paper_detector.paper_info
@@ -44,12 +37,12 @@ class SelfieDrawer:
         self.path_planner.visualization()
 
     def start_drawing(self):
-        self.paper_local_info = self.paper_detector.paper_info  # update paper local info
-        self.paper_global_info = self.ur3_controller.define_paper_global_coord(self.paper_local_info)  # convert to glb
-        self.ur3_controller.run(self.paper_global_info)  # let ur3 to reach 4 corners of the paper
+        # self.paper_local_info = self.paper_detector.paper_info  # update paper local info
+        # self.paper_global_info = self.ur3_controller.define_paper_global_coord(self.paper_local_info)  # convert to glb
+        # self.ur3_controller.run(self.paper_global_info)  # let ur3 to reach 4 corners of the paper
         self.handle_img_processing()  # run img processing & get contours
         self.final_contour_updator()  # update the final contours
-        self.tsp_algo()  # run tsp algo get effective path
+        # self.tsp_algo()  # run tsp algo get effective path
         # TODO: control ur3 to move to these coordinates
 
     def callback(self, msg_color, msg_depth):

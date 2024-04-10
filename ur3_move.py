@@ -29,14 +29,14 @@ class UR3_Control:
     @staticmethod
     def define_cam_ee_offset():
         cam_ee_offset = geometry_msgs.msg.Pose()
-        cam_ee_offset.position.y = 0.05358  # 53.58 mm
-        cam_ee_offset.position.z = 0.02806  # 28.06 mm
+        cam_ee_offset.position.x = 0.02806  # 28.06 mm camera facing down to the paper
+        cam_ee_offset.position.z = 0.05358  # 53.58 mm
         return cam_ee_offset
 
     def define_pen_ee_offset(self, pen_length):
         # usr need to input pen's length to define the offset
         self.pen_ee_offset = geometry_msgs.msg.Pose()
-        self.pen_ee_offset.position.y = pen_length
+        self.pen_ee_offset.position.z = pen_length
 
     def move_to_goals(self, pen_goals):
 
@@ -48,8 +48,8 @@ class UR3_Control:
         for pen_goal in pen_goals:
             arm_goal = geometry_msgs.msg.Pose()
             arm_goal.position.x = pen_goal.position.x
-            arm_goal.position.y = pen_goal.position.y - self.pen_ee_offset.position.y
-            arm_goal.position.z = pen_goal.position.z
+            arm_goal.position.y = pen_goal.position.y
+            arm_goal.position.z = pen_goal.position.z - self.pen_ee_offset.position.z
 
             # 使用转换后的arm_goal作为移动的目标
             self.move_group.set_pose_target(arm_goal)
@@ -75,9 +75,9 @@ class UR3_Control:
         global_corners = []
         for (x_local, y_local, _) in local_corners:
             # convert local to global
-            global_x = current_ee_global.position.x + x_local
-            global_y = current_ee_global.position.y + y_local - cam_ee_offset.position.y
-            global_z = current_ee_global.position.z + distance - cam_ee_offset.position.z
+            global_x = current_ee_global.position.x + x_local - cam_ee_offset.position.x
+            global_y = current_ee_global.position.y + y_local
+            global_z = current_ee_global.position.z + distance + cam_ee_offset.position.z
             global_corners.append((global_x, global_y, global_z))
 
         return global_corners

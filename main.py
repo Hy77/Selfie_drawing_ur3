@@ -14,15 +14,13 @@ package_path = rospack.get_path('selfie_drawer_pkg')
 image_path = package_path + '/Selfie_drawing_ur3/photo_1.jpg'
 predictor_path = package_path + '/Selfie_drawing_ur3/shape_predictor_68_face_landmarks.dat'
 
-def main():
 
+def main():
     try:
         method = input(
             "Choose a vectorization method ('n' for nearest neighbor, 'b' for bilinear, or 'c' for bicubic): ").lower()
-        size = input(
-            "Choose a img size (enter 'a3' or press 'enter' to use origin img size): ").lower()
         image = cv2.imread(image_path)  # read the img
-        selfie_drawer = SelfieDrawer(image=image, method=method, size=size, predictor_path=predictor_path)
+        selfie_drawer = SelfieDrawer(image=image, method=method, predictor_path=predictor_path)
         selfie_drawer.run()
     except KeyboardInterrupt:
         print("Shutting down")
