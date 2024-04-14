@@ -2,7 +2,7 @@
 # main.py
 import cv2
 import time
-from img_processing import ImgProcessor
+from selfie_drawing import SelfieDrawer
 
 import rospkg
 
@@ -48,14 +48,14 @@ def take_photo():
 
 
 def main():
-    try:
-        method = input(
-            "Choose a vectorization method ('n' for nearest neighbor, 'b' for bilinear, or 'c' for bicubic): ").lower()
-        image = take_photo()  # Capture a photo from the camera
-        img_processor = ImgProcessor()
-        img_processor.img_processing(image, method, predictor_path)
-    except KeyboardInterrupt:
-        print("Shutting down")
+    method = input(
+        "Choose a vectorization method ('n' for nearest neighbor, 'b' for bilinear, or 'c' for bicubic): ").lower()
+    # image = take_photo()  # Capture a photo from the camera
+    image = cv2.imread(package_path + '/Selfie_drawing_ur3/photo_1.jpg')    # For debugging
+    if image is None:
+        raise FileNotFoundError(f"Image file captured_photo.jpg not found.")
+    selfie_drawer = SelfieDrawer(image, method, predictor_path)
+    selfie_drawer.run()
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':

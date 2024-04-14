@@ -37,12 +37,15 @@ class SelfieDrawer:
         self.path_planner.visualization()
 
     def start_drawing(self):
+        print("--------------------- Start Paper Detecting ----------------------")
         # self.paper_local_info = self.paper_detector.paper_info  # update paper local info
         # self.paper_global_info = self.ur3_controller.define_paper_global_coord(self.paper_local_info)  # convert to glb
+        print("---------------------- Start Paper Locating ----------------------")
         # self.ur3_controller.run(self.paper_global_info)  # let ur3 to reach 4 corners of the paper
+        print("--------------------- Start Image Processing ---------------------")
         self.handle_img_processing()  # run img processing & get contours
-        self.final_contour_updator()  # update the final contours
-        # self.tsp_algo()  # run tsp algo get effective path
+        print("------------------------Start TSP Planning -----------------------")
+        self.tsp_algo()  # run tsp algo get effective path
         # TODO: control ur3 to move to these coordinates
 
     def callback(self, msg_color, msg_depth):

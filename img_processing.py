@@ -50,52 +50,40 @@ class ImgProcessor():
         return image_bkg_removal
 
     @staticmethod
-    def resize_and_center_on_a5_img(image, border_size):
-        # A5 size in pixels at 300 dpi
-        a5_width, a5_height = 1748, 2480
-
-        # Convert OpenCV image to PIL format
-        image_pil = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-
-        # Get image dimensions
-        original_width, original_height = image_pil.size
-
-        # Calculate the new size while maintaining the aspect ratio
-        aspect_ratio = original_width / original_height
-        if a5_width / a5_height >= aspect_ratio:
-            new_width = int(a5_height * aspect_ratio)
-            new_height = a5_height
-        else:
-            new_width = a5_width
-            new_height = int(a5_width / aspect_ratio)
-
-        # Resize the image
-        resized_image_pil = image_pil.resize((new_width, new_height), Image.Resampling.LANCZOS)
-
-        # Create a new image with a white background
-        new_image = Image.new('RGB', (a5_width, a5_height), 'black')
-
-        # Calculate the position to paste the resized image
-        x_offset = (a5_width - new_width) // 2
-        y_offset = (a5_height - new_height) // 2
-
-        # Paste the resized image onto the center of the new image
-        new_image.paste(resized_image_pil, (x_offset, y_offset))
-
-        # Add border
-        border_image = Image.new('RGB', (a5_width - 2 * border_size, a5_height - 2 * border_size), 'black')
-        border_image.paste(new_image, (border_size, border_size))
-
-        # Convert PIL image back to OpenCV format
-        open_cv_image = cv2.cvtColor(np.array(border_image), cv2.COLOR_RGB2BGR)
-
-        return open_cv_image
-
-    @staticmethod
     def cv2_imshow_resize_image_for_display(image_name, image):
         cv2.namedWindow(image_name, cv2.WINDOW_NORMAL)
         cv2.resizeWindow(image_name, 600, 850)
         cv2.imshow(image_name, image)
+
+    @staticmethod
+    def convert_contours_to_a5_size(original_contours, original_size):
+        a5_size = [1748, 2480]
+        # Calculate scale ratios in x and y dimensions
+        scale_x = a5_size[0] / original_size[1]
+        scale_y = a5_size[1] / original_size[0]
+        scale_ratio = min(scale_x, scale_y)
+
+        # Calculate the offsets to center the contours
+        offset_x = (a5_size[0] - (original_size[1] * scale_ratio)) / 2
+        offset_y = (a5_size[1] - (original_size[0] * scale_ratio)) / 2
+
+        a5_contours = []
+        for contour in original_contours:
+            # Check if the contour is in the expected structure (list of lists)
+            if isinstance(contour, np.ndarray) and len(contour.shape) == 3 and contour.shape[1] == 1:
+                # Reshape the contour to (n, 2)
+                contour = contour.reshape(-1, 2)
+
+            scaled_contour = []
+            for point in contour:
+                # Apply the scaling and offset to each point
+                new_point = [int(point[0] * scale_ratio + offset_x), int(point[1] * scale_ratio + offset_y)]
+                scaled_contour.append(new_point)
+
+            # Reshape the scaled contour back to (n, 1, 2) for OpenCV functions
+            a5_contours.append(np.array(scaled_contour, dtype=np.int32).reshape(-1, 1, 2))
+
+        return a5_contours
 
     def contour_to_nearest_neighbor_vector(self, contour):
         # Make sure the outline is a two-dimensional array
@@ -151,10 +139,28 @@ class ImgProcessor():
 
         return self.b_vector
 
-    def contour_to_cubic_spline(self, contour, num_points=100):
+    def contour_to_cubic_spline(self, contour, num_points=10000, smoothness=1500, merge_distance=10):
+        # Convert contour coordinates to numpy array
+        contour = np.array(contour, dtype=np.float32).reshape(-1, 2)
 
-        self.c_vector = contour
-        return self.c_vector
+        # 创建参数化变量
+        tck, u = splprep([contour[:, 0], contour[:, 1]], s=smoothness)
+
+        # Generate new points on the spline curve using finer intervals
+        unew = np.linspace(0, 1, num_points)
+        out = splev(unew, tck)
+
+        # Combine new x and y coordinate points
+        new_contour = np.column_stack(out)
+
+        # Merge points that are too close together
+        final_contour = [new_contour[0]]
+        for point in new_contour[1:]:
+            if np.linalg.norm(final_contour[-1] - point) >= merge_distance:
+                final_contour.append(point)
+
+        # Convert final contours to integer types
+        return np.array(final_contour, dtype=np.int32).reshape(-1, 1, 2)
 
     @staticmethod
     def simplify_contour(contour, threshold):
@@ -165,9 +171,10 @@ class ImgProcessor():
 
         return np.array(simplified_vector)
 
-    def process_and_blur_contours(self, contours, blur_ksize=17):
+    @staticmethod
+    def process_and_blur_contours(contours, image, blur_ksize=17):
         # Create a blank image, the same size as the original image
-        blank_image = np.zeros((self.image.shape[0], self.image.shape[1]), dtype=np.uint8)
+        blank_image = np.zeros((image.shape[0], image.shape[1]), dtype=np.uint8)
 
         # Drawing contours on the blank image
         for contour in contours:
@@ -181,16 +188,20 @@ class ImgProcessor():
 
         # Use Gaussian blur
         blurred_image = cv2.GaussianBlur(blank_image, (blur_ksize, blur_ksize), 0)
-        cv2.imshow('Blurred Image', blurred_image)
+        # cv2.imshow('Blurred Image', blurred_image)
+
+        # make it brighter
         adjusted_img = cv2.convertScaleAbs(blurred_image, alpha=5.0, beta=0)
-        cv2.imshow('Adjusted Image', adjusted_img)
-        kernel = np.ones((2, 2), np.uint8)
-        thinned_image = cv2.erode(adjusted_img, kernel, iterations=1)
+        # cv2.imshow('Adjusted Image', adjusted_img)
+
+        # Apply thinning
+        thinned_image = ximgproc.thinning(adjusted_img)
         # cv2.imshow('Thinned Image', thinned_image)
 
-        return thinned_image
+        thinned_contours, _ = cv2.findContours(thinned_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        return thinned_contours
 
-    def process_facial_contours(self, contours, facial_contours, method):
+    def process_contours(self, contours, facial_contours, image):
         # Combine facial feature contours into one list
         facial_feature_points = []
         for face in facial_contours:
@@ -201,24 +212,30 @@ class ImgProcessor():
         facial_feature_points = np.array(facial_feature_points)
 
         # Process each contour
-        processed_facial_contours = []
+        processed_contours = []
+        non_facial_contours = []
         for contour in contours:
             if len(contour) > 3:
                 # Check if the contour is part of the facial features
                 if self.is_contour_in_facial_features(contour, facial_feature_points):
                     # Keep the contour as it is
-                    processed_facial_contours.append(contour)
+                    processed_contours.append(contour)
                 else:
                     # Simplify the contour
                     try:
-                        simp_contours = self.simplify_contour(contour, 30)
-                        self.non_facial_contours.append(simp_contours)
+                        simp_non_facial_contour = self.simplify_contour(contour, 70)
+                        non_facial_contours.append(simp_non_facial_contour)
                     except ValueError as e:
                         # Print error & skip this contour
                         print(f"Error processing contour: {e}")
                         continue
 
-        return processed_facial_contours
+        # Process the non-facial contours collectively, assuming this function returns contours
+        if non_facial_contours:
+            refined_non_facial_contours = self.process_and_blur_contours(non_facial_contours, image)
+            processed_contours.extend(refined_non_facial_contours)  # Extend if multiple contours returned
+
+        return processed_contours
 
     @staticmethod
     def is_contour_in_facial_features(contour, facial_feature_points):
@@ -251,91 +268,72 @@ class ImgProcessor():
         y_max = min(image.shape[0], y_max + vertical_padding)
 
         # Crop the image to the region of interest
-        facial_region = image[y_min:y_max, x_min:x_max]
-
-        # Resize and center the cropped image on an A5 page & convert the img to a4 size paper
-        print("Converting to A4...")
-        a5_size_img_colour = self.resize_and_center_on_a5_img(facial_region, 50)
-        self.image = a5_size_img_colour  # Store the A4 size image for further processing
-        a4_drawing_board = np.zeros_like(a5_size_img_colour)
-        self.cv2_imshow_resize_image_for_display('Selfie A4 Image (colour)', a5_size_img_colour)
+        ori_facial_region = image[y_min:y_max, x_min:x_max]
 
         # Remove background
         print("Removing background...")
-        image_bkg_removal = self.remove_background(facial_region)
-        a5_size_img_colour_rembg = self.resize_and_center_on_a5_img(image_bkg_removal, 50)
-        self.cv2_imshow_resize_image_for_display('Greyscale Image', a5_size_img_colour_rembg)
+        ori_image_bkg_removal = self.remove_background(ori_facial_region)
+        ori_image_bkg_removal_grey = cv2.cvtColor(ori_image_bkg_removal, cv2.COLOR_BGR2GRAY)
+        cv2.imshow("Selfie - colour", ori_facial_region)
 
-        # Convert to greyscale
-        # greyscale_image = cv2.cvtColor(image_bkg_removal, cv2.COLOR_BGR2GRAY)
-        # a4_size_img_grey = self.resize_and_center_on_a4_img(greyscale_image, 50)
-        # self.cv2_imshow_resize_image_for_display('Greyscale Image', a4_size_img_grey)
+        # Resize the img to fixed size 360x480, -> easier to handle the edges/contours
+        print("Rescaling the img to 360*480...")
+        resized_ori_image_bkg_removal_grey = cv2.resize(ori_image_bkg_removal_grey, (360, 480), interpolation=cv2.INTER_LINEAR)
+        cv2.imshow("Resized Selfie - bkg removed - grey", resized_ori_image_bkg_removal_grey)  # Display the resized image
 
         # NOW detect facial features again & get coordinates
-        facial_contours = self.sense_detector.detect_senses(predictor_path, a5_size_img_colour_rembg)
+        print("Finding senses...")
+        resized_ori_facial_contours = self.sense_detector.detect_senses(predictor_path, resized_ori_image_bkg_removal_grey)
 
         # Apply Canny edge detector
-        print("Finding edges...")
-        sobelx = cv2.Sobel(a5_size_img_colour_rembg, cv2.CV_64F, 1, 0, ksize=3)
-        sobely = cv2.Sobel(a5_size_img_colour_rembg, cv2.CV_64F, 0, 1, ksize=3)
-        edges = cv2.magnitude(sobelx, sobely)
-        self.cv2_imshow_resize_image_for_display('Edges', edges)
-        # blurred_img = cv2.GaussianBlur(a5_size_img_colour_rembg, (9, 9), sigmaX=7, sigmaY=7)
-        # self.cv2_imshow_resize_image_for_display('blur', blurred_img)
-        # a4_edges = cv2.Canny(a5_size_img_colour_rembg, threshold1=10, threshold2=25)
-        # self.cv2_imshow_resize_image_for_display('Edges', a4_edges)
-        # cv2.imwrite('a4_edge.jpg', a4_edges)
-        '''
-        # 找到边缘图像中的轮廓
-        a4_edges_8bit = cv2.convertScaleAbs(a4_edges)
-        contours, _ = cv2.findContours(a4_edges_8bit, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        a4_drawing_board1 = np.zeros_like(a4_size_img_grey)
-        for contour in contours:
-            # Ensure the contour coordinates are within the image dimensions
-            contour = np.clip(contour, 0, np.array(a4_drawing_board1.shape[:2][::-1]) - 1)
-            cv2.polylines(a4_drawing_board1, [contour], isClosed=False, color=(255, 255, 255), thickness=1)
-        self.cv2_imshow_resize_image_for_display('contours', a4_drawing_board1)
-        
-        # Process contours
-        processed_facial_contours = self.process_facial_contours(contours, facial_contours, method)
-        for contour in processed_facial_contours:
-            # Ensure the contour coordinates are within the image dimensions
-            contour = np.clip(contour, 0, np.array(self.image.shape[:2][::-1]) - 1)
-            cv2.polylines(a4_drawing_board, [contour], isClosed=False, color=(255, 255, 255), thickness=1)
-        self.cv2_imshow_resize_image_for_display('facial.jpg', a4_drawing_board)
-        
-        # custom vectorized contours
-        custom_vectorized_contours = self.vectorize_contour(processed_contours, method)
+        print("Blurring img...")
+        resized_ori_blurred_img = cv2.GaussianBlur(resized_ori_image_bkg_removal_grey, (3, 3), sigmaX=1, sigmaY=1)
 
-        '''
+        # Use Canny to find edges
+        print("Finding edges & contours...")
+        resized_ori_edges = cv2.Canny(resized_ori_blurred_img, threshold1=50, threshold2=100)  # 50 100 using photos from online | 40 70 using camera
+        cv2.imshow('ori_Edges', resized_ori_edges)
+        # Find contours on edges
+        contours, _ = cv2.findContours(resized_ori_edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        # Process contours
+        print("Simplifying contours...")
+        processed_contours = self.process_contours(contours, resized_ori_facial_contours, resized_ori_edges)  # keep facial contour's details as much as possible
+
         # 1. Origin img -> bkg removal -> greyscale -> find edge -> find contours
         # 2. Get senses area -> separate contours to 2.1 facial and 2.2 non_facial
         # 3. keep facial's contours detail & blur non_facial contours img
         # 4. Increase non_facial img contrast & use ximgproc.thinning() to get line's 'skeleton'
         # 5. Save the non_facial img & draw the facial's contours on that img
-        '''
-        # Use non_facial img as the base
-        non_facial_image = self.process_and_blur_contours(self.non_facial_contours)
-        non_facial_contours, _ = cv2.findContours(non_facial_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-        # Concatenate the two lists
-        custom_vectorized_contours.extend(non_facial_contours)
+        # Convert contours to a5 size
+        print("Converting contours into A5 size...")
+        a5_contours = self.convert_contours_to_a5_size(processed_contours, resized_ori_edges.shape[:2])
+        a5_image = np.zeros((2480, 1748, 3), dtype=np.uint8)
+        # Draw contours on a5 size paper
+        for contour in a5_contours:
+            cv2.drawContours(a5_image, [contour], -1, [255, 255, 255], 1)
+        self.cv2_imshow_resize_image_for_display('A5 Contours', a5_image)
+        # Save the original A5 size vectorized image
+        cv2.imwrite('A5 Contours.jpg', a5_image)
+
+        # custom vectorized contours
+        print(f"Vectorizing contours by using {method.upper()} method...")
+        custom_vectorized_contours = self.vectorize_contour(a5_contours, method)
+        a5_drawing_board = np.zeros_like(a5_image)
+        for contour in custom_vectorized_contours:
+            cv2.drawContours(a5_drawing_board, [contour], -1, [255, 255, 255], 1)
+        self.cv2_imshow_resize_image_for_display('a5_drawing_board', a5_drawing_board)
+        cv2.imwrite(f'{method.upper()} vectorized_a5_drawing_board.jpg', a5_drawing_board)
+
+        # update final contours & images
         self.final_contours = custom_vectorized_contours
+        self.final_image = a5_drawing_board
 
-        for contour in self.final_contours:
-            # Ensure the contour coordinates are within the image dimensions
-            contour = np.clip(contour, 0, np.array(image.shape[:2][::-1]) - 1)
-            cv2.polylines(a4_drawing_board, [contour], isClosed=False, color=(255, 255, 255), thickness=1)
-        self.final_image = a4_drawing_board
-        # Display the images
-        self.cv2_imshow_resize_image_for_display(f'{method.upper()} Vectorized Contours', a4_drawing_board)
-
-        # Save the original A3 size vectorized image
-        # cv2.imwrite(f'img_results/a3_size_img_results/{method.upper()} vectorized_image_a3.jpg', non_facial_image)
-        '''
-        # Wait for a key press and close windows if 'q' is pressed
-        if cv2.waitKey(0) & 0xFF == ord('q'):
-            cv2.destroyAllWindows()
+        cv2.waitKey(0)
+        # # Wait for a key press and close windows if 'q' is pressed
+        # if cv2.waitKey(0) & 0xFF == ord('q'):
+        #     cv2.destroyAllWindows()
 
     def update_final_contours(self):
         return self.final_contours
