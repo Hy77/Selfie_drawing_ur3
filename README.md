@@ -63,10 +63,10 @@ This guide will help you set up a UR3 robot simulator using Gazebo, MoveIt, and 
    ```
 
 5. **Control the Robot (Optional):**
-   If you have a custom Python script to control the robot (e.g., `ur3_move.py`), you can run it:
+   If you have a custom Python script to control the robot (e.g., `ur3_control_actionlib.py`), you can run it:
 
    ```bash
-   ./ur3_move.py
+   ./ur3_control_actionlib.py
    ```
 ## Running on the real UR3
 
@@ -96,8 +96,8 @@ This guide will help you set up a UR3 robot simulator using Gazebo, MoveIt, and 
   source /opt/ros/noetic/setup.bash
   ```
 
-- You may need to adjust permissions for your script (`ur3_move.py`) to make it executable:
+- You may need to adjust permissions for your script (`ur3_control_actionlib.py`) to make it executable:
 
   ```bash
-  chmod +x ur3_move.py
+  chmod +x ur3_control_actionlib.py
   ```
