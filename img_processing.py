@@ -9,6 +9,7 @@ from sense_detector import SenseDetector
 import cv2.ximgproc as ximgproc
 import rembg
 
+
 class ImgProcessor():
 
     def __init__(self):
@@ -40,10 +41,8 @@ class ImgProcessor():
     def remove_background(image):
         # Convert the input image to a numpy array
         input_array = np.array(image)
-
         # Apply background removal using rembg
         output_array = rembg.remove(input_array)
-
         # Convert RGBA output to BGR
         image_bkg_removal = cv2.cvtColor(output_array, cv2.COLOR_RGBA2BGR)
 
@@ -85,59 +84,48 @@ class ImgProcessor():
 
         return a5_contours
 
-    def contour_to_nearest_neighbor_vector(self, contour):
-        # Make sure the outline is a two-dimensional array
-        contour = contour.reshape(-1, 2)
-        vectorized_contour = [contour[0]]  # Initialising the vectorised profile
+    def contour_to_nearest_neighbor_vector(self, contour, merge_distance=10):
+        # Convert contour coordinates to numpy array
+        contour = np.array(contour, dtype=np.float32).reshape(-1, 2)
 
-        for i in range(1, len(contour)):
-            prev_point = vectorized_contour[-1]
-            cur_point = contour[i]
+        # Merge points that are too close together
+        simplified_contour = [contour[0]]
+        for point in contour[1:]:
+            if np.linalg.norm(simplified_contour[-1] - point) >= merge_distance:
+                simplified_contour.append(point)
 
-            # Check whether the line segments are aligned along the x-axis or the y-axis.
-            if abs(prev_point[0] - cur_point[0]) > abs(prev_point[1] - cur_point[1]):
-                # x-axis alignment
-                new_point = (cur_point[0], prev_point[1])
-            else:
-                # y-axis alignment
-                new_point = (prev_point[0], cur_point[1])
+        final_contour = [simplified_contour[0]]
+        for i in range(1, len(simplified_contour)):
+            final_contour.append(simplified_contour[i])
+            if i < len(simplified_contour) - 1:  # Connecting each point to the next
+                final_contour.append(simplified_contour[i + 1])
 
-            vectorized_contour.append(new_point)
-            vectorized_contour.append(cur_point)
+        return np.array(final_contour, dtype=np.int32).reshape(-1, 1, 2)
 
-        self.n_vector = np.array(vectorized_contour, dtype=int)
+    def contour_to_bilinear_vector(self, contour, num_points=1000, merge_distance=10):
+        # Convert contour coordinates to numpy array
+        contour = np.array(contour, dtype=np.float32).reshape(-1, 2)
 
-        return self.n_vector
-
-    def contour_to_bilinear_vector(self, contour, num_points=100):
-        # Convert the contour to a NumPy array
-        contour = np.array(contour)
-
-        # Ensure the contour has at least three points for interpolation
-        if len(contour) < 3:
-            return contour
-
-        # Make sure the outline is a two-dimensional array
-        contour = contour.reshape(-1, 2)
-        x = np.array(contour[:, 0])
-        y = np.array(contour[:, 1])
-
-        # Create parameterised variables
-        t = np.linspace(0, 1, len(x))
+        # Creating parameterised variables
+        t = np.linspace(0, 1, len(contour[:, 0]))
         t_new = np.linspace(0, 1, num_points)
 
-        # Create interpolating functions and generate smooth curves
-        f1 = interp1d(t, x, kind='quadratic')
-        f2 = interp1d(t, y, kind='quadratic')
+        # quadratic interpolation function
+        f_x = interp1d(t, contour[:, 0], kind='quadratic')
+        f_y = interp1d(t, contour[:, 1], kind='quadratic')
 
-        # Use the interpolating function to generate new points
-        x_new = f1(t_new)
-        y_new = f2(t_new)
+        # Combine new x and y coordinate points
+        x_new = f_x(t_new)
+        y_new = f_y(t_new)
 
-        # Form new points into contours
-        self.b_vector = np.stack((x_new, y_new), axis=1).astype(int)
+        # Merge points that are too close together
+        new_contour = np.column_stack((x_new, y_new))
+        final_contour = [new_contour[0]]
+        for point in new_contour[1:]:
+            if np.linalg.norm(final_contour[-1] - point) >= merge_distance:
+                final_contour.append(point)
 
-        return self.b_vector
+        return np.array(final_contour, dtype=np.int32).reshape(-1, 1, 2)
 
     def contour_to_cubic_spline(self, contour, num_points=10000, smoothness=1500, merge_distance=10):
         # Convert contour coordinates to numpy array
@@ -278,12 +266,15 @@ class ImgProcessor():
 
         # Resize the img to fixed size 360x480, -> easier to handle the edges/contours
         print("Rescaling the img to 360*480...")
-        resized_ori_image_bkg_removal_grey = cv2.resize(ori_image_bkg_removal_grey, (360, 480), interpolation=cv2.INTER_LINEAR)
-        cv2.imshow("Resized Selfie - bkg removed - grey", resized_ori_image_bkg_removal_grey)  # Display the resized image
+        resized_ori_image_bkg_removal_grey = cv2.resize(ori_image_bkg_removal_grey, (360, 480),
+                                                        interpolation=cv2.INTER_LINEAR)
+        cv2.imshow("Resized Selfie - bkg removed - grey",
+                   resized_ori_image_bkg_removal_grey)  # Display the resized image
 
         # NOW detect facial features again & get coordinates
         print("Finding senses...")
-        resized_ori_facial_contours = self.sense_detector.detect_senses(predictor_path, resized_ori_image_bkg_removal_grey)
+        resized_ori_facial_contours = self.sense_detector.detect_senses(predictor_path,
+                                                                        resized_ori_image_bkg_removal_grey)
 
         # Apply Canny edge detector
         print("Blurring img...")
@@ -291,14 +282,16 @@ class ImgProcessor():
 
         # Use Canny to find edges
         print("Finding edges & contours...")
-        resized_ori_edges = cv2.Canny(resized_ori_blurred_img, threshold1=50, threshold2=100)  # 50 100 using photos from online | 40 70 using camera
+        resized_ori_edges = cv2.Canny(resized_ori_blurred_img, threshold1=50,
+                                      threshold2=100)  # 50 100 using photos from online | 40 70 using camera
         cv2.imshow('ori_Edges', resized_ori_edges)
         # Find contours on edges
         contours, _ = cv2.findContours(resized_ori_edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         # Process contours
         print("Simplifying contours...")
-        processed_contours = self.process_contours(contours, resized_ori_facial_contours, resized_ori_edges)  # keep facial contour's details as much as possible
+        processed_contours = self.process_contours(contours, resized_ori_facial_contours,
+                                                   resized_ori_edges)  # keep facial contour's details as much as possible
 
         # 1. Origin img -> bkg removal -> greyscale -> find edge -> find contours
         # 2. Get senses area -> separate contours to 2.1 facial and 2.2 non_facial
