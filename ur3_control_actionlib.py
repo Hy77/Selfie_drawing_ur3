@@ -5,6 +5,10 @@ import math
 import rospy
 import actionlib
 import moveit_commander
+from scipy.ndimage import gaussian_filter1d
+import numpy as np
+import matplotlib.pyplot as plt
+from sensor_msgs.msg import JointState
 from control_msgs.msg import FollowJointTrajectoryAction, FollowJointTrajectoryGoal
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from moveit_commander.conversions import pose_to_list
@@ -27,7 +31,11 @@ class UR3Control:
         # Initialize action client
         self.client = actionlib.SimpleActionClient('/eff_joint_traj_controller/follow_joint_trajectory', FollowJointTrajectoryAction)
         rospy.loginfo("Waiting for follow_joint_trajectory server...")
-        self.client.wait_for_server()
+        # self.client.wait_for_server()
+
+        # subscribe joint state
+        self.joint_states = []
+        self.subscriber = rospy.Subscriber("/joint_states", JointState, self.joint_state_callback)
 
         # Initialize the IK service
         rospy.wait_for_service('compute_ik')
@@ -40,6 +48,46 @@ class UR3Control:
     def get_current_ee_pose(self):
         # Get the current pose and return it
         return self.group.get_current_pose()
+
+    def joint_state_callback(self, data):
+        # Add time and joint velocities to the joint_states list
+        self.joint_states.append((rospy.get_time(), list(data.position), list(data.velocity)))
+
+    def plot_velocities_accelerations(self):
+        times, positions, velocities = zip(*self.joint_states)
+
+        velocities = np.array([gaussian_filter1d(v, 5) for v in np.array(velocities).T]).T
+        accelerations = np.gradient(velocities, axis=0, edge_order=2)
+        jerks = np.gradient(accelerations, axis=0, edge_order=2)
+
+        # Plot smoothed velocities
+        plt.figure(figsize=(10, 5))
+        plt.subplot(1, 2, 1)
+        for i in range(velocities.shape[1]):
+            plt.plot(times, velocities[:, i], label=f'Velocity Joint {i + 1}')
+        plt.xlabel('Time (s)')
+        plt.ylabel('Velocity (rad/s)')
+        plt.title('Joint Velocities Over Time')
+        plt.legend()
+
+        # Plot smoothed accelerations
+        plt.subplot(1, 2, 2)
+        for i in range(accelerations.shape[1]):
+            plt.plot(times, accelerations[:, i], label=f'Acceleration Joint {i + 1}')
+        plt.xlabel('Time (s)')
+        plt.ylabel('Acceleration (rad/s^2)')
+        plt.title('Joint Accelerations Over Time')
+
+        # Plot smoothed jerks
+        plt.figure(figsize=(10, 5))
+        for i in range(jerks.shape[1]):
+            plt.plot(times, jerks[:, i], label=f'Jerk Joint {i + 1}')
+        plt.xlabel('Time (s)')
+        plt.ylabel('Jerk (rad/s^3)')
+        plt.title('Joint Jerks Over Time')
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
 
     def compute_ik_pose(self, pose):
         ik_request = PositionIKRequest()
@@ -150,8 +198,14 @@ class UR3Control:
 
     # control ur3 move to the goal
     def run(self, goals, pen_length):
+        # Process all goals
         for goal in goals:
             self.process_goal(goal, pen_length)
+            # Wait for the result to make sure we don't send the next goal too early
+            self.client.wait_for_result()
+
+        # After all movements are done, plot the joint states
+        self.plot_velocities_accelerations()
 
 
 if __name__ == '__main__':

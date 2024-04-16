@@ -12,7 +12,7 @@ class SelfieDrawer:
         self.img_processor = ImgProcessor()
         self.path_planner = PathPlanner
         self.paper_detector = PaperDetector()
-        self.ur3_controller = UR3Control()
+        # self.ur3_controller = UR3Control()
         self.paper_local_info = None
         self.paper_global_info = None
         self.image = image
