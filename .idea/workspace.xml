@@ -5,9 +5,9 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="ffb29561-02ef-4074-92cb-1c51790b2539" name="Changes" comment="selfie_drawing_ur3">
-      <change afterPath="$PROJECT_DIR$/A5 Contours.jpg" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/C vectorized_a5_drawing_board.jpg" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ur3_move_simple.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/paper_detector.py" beforeDir="false" afterPath="$PROJECT_DIR$/paper_detector.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/selfie_drawing.py" beforeDir="false" afterPath="$PROJECT_DIR$/selfie_drawing.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/ur3_control_actionlib.py" beforeDir="false" afterPath="$PROJECT_DIR$/ur3_control_actionlib.py" afterDir="false" />
     </list>
@@ -66,7 +66,7 @@
     &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
     &quot;git-widget-placeholder&quot;: &quot;main&quot;,
-    &quot;last_opened_file_path&quot;: &quot;/home/haiyang/roboticstudio2/src/selfie_drawer_pkg/src/Selfie_drawing_ur3&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/home/haiyang/roboticstudio2/src/selfie_drawer_pkg/Selfie_drawing_ur3&quot;,
     &quot;settings.editor.selected.configurable&quot;: &quot;com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable&quot;
   }
 }</component>
@@ -102,7 +102,7 @@
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-python-sdk-0509580d9d50-746f403e7f0c-com.jetbrains.pycharm.community.sharedIndexes.bundled-PC-241.14494.241" />
+        <option value="bundled-python-sdk-09665e90c3a7-d3b881c8e49f-com.jetbrains.pycharm.community.sharedIndexes.bundled-PC-233.15026.15" />
       </set>
     </attachedChunks>
   </component>

@@ -3,113 +3,155 @@ import numpy as np
 import threading
 from cv_bridge import CvBridge
 
-
 class PaperDetector:
     def __init__(self):
-        self.fx = 615.657
-        self.fy = 614.627
-        self.cx = 321.782
-        self.cy = 240.117
+        self.fx = 615.657  # Focal length in pixels
+        self.fy = 614.627  # Focal length in pixels
+        self.cx = 321.782  # Camera optical center in pixels
+        self.cy = 240.117  # Camera optical center in pixels
         self.cv_bridge = CvBridge()
         self.latest_img_color = None
         self.latest_img_depth = None
         self.image_lock = threading.Lock()
-        self.paper_found = False
-        self.paper_info = None
         self.display_thread = threading.Thread(target=self.display_loop)
         self.display_thread.daemon = True
         self.display_thread.start()
+        self.running = True
 
-    def display_loop(self):
-        while True:
+    def display_loop(self, running=True):
+        while running:
             with self.image_lock:
                 if self.latest_img_color is not None:
+                    self.latest_img_color = self.draw_camera_axes(self.latest_img_color)
                     cv2.imshow('RGB_Img', self.latest_img_color)
-                    cv2.waitKey(1)
+                    if cv2.waitKey(1) == 27:  # Exit on ESC key
+                        self.running = False  # Set running to False to stop the loop
+        if not running:
+            self.running = False
+            cv2.destroyAllWindows()
 
-    def paper_detection(self):
+    @staticmethod
+    def draw_camera_axes(image):
+        # 确定坐标轴的起点（图像中的位置）
+        origin = (50, 50)  # 假设坐标系原点在图像的(50, 50)处
+
+        # 定义坐标轴长度
+        axis_length = 40
+
+        # X轴：红色
+        x_axis_end = (origin[0] + axis_length, origin[1])
+        cv2.arrowedLine(image, origin, x_axis_end, (0, 0, 255), 2)
+
+        # Y轴：绿色
+        y_axis_end = (origin[0], origin[1] + axis_length)
+        cv2.arrowedLine(image, origin, y_axis_end, (0, 255, 0), 2)
+
+        # 在轴线旁边添加标签
+        cv2.putText(image, 'X', (x_axis_end[0] + 10, x_axis_end[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+        cv2.putText(image, 'Y', (y_axis_end[0] - 10, y_axis_end[1] + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+        return image
+
+    @staticmethod
+    def order_points(pts):
+        # 根据x+y的值找到最左上角的点
+        s = pts.sum(axis=1)
+        top_left_index = np.argmin(s)
+        ordered = np.roll(pts, -top_left_index, axis=0)
+
+        # 确保是顺时针方向
+        # 计算向量叉乘，判断顺序（根据前三个点）
+        if len(ordered) >= 3:
+            vec1 = ordered[1] - ordered[0]
+            vec2 = ordered[2] - ordered[1]
+            cross_product = np.cross(vec1, vec2)
+            if cross_product > 0:
+                # 如果是逆时针，反转顺序（除了第一个点）
+                ordered[1:] = ordered[1:][::-1]
+        return ordered
+
+    @staticmethod
+    def swap_y_values(global_corners):
+        # 提取x, y, z值
+        x_values, y_values, z_values = zip(*global_corners)
+
+        # 交换y值
+        y_values = list(y_values)
+        y_values[0], y_values[1] = y_values[1], y_values[0]
+        y_values[2], y_values[3] = y_values[3], y_values[2]
+
+        # 重建全局角点列表
+        swapped_corners = [(x, y, z) for x, y, z in zip(x_values, y_values, z_values)]
+        return swapped_corners
+
+    def calculate_local_coordinates(self, camera_pose, corners, mean_depth):
+        fx = 912.508056640625
+        fy = 912.2136840820312
+        cx = 651.252197265625
+        cy = 348.5895080566406
+
+        global_corners = []
+        camera_x, camera_y, camera_z = camera_pose
+        for (x_pixel, y_pixel) in corners:
+            # 将像素坐标转换为以摄像头为原点的空间坐标
+            x_local = (x_pixel - cx) * mean_depth / fx
+            y_local = (y_pixel - cy) * mean_depth / fy
+
+            # UR3坐标系调整: 交换x和y，根据你的系统可能需要调整符号
+            x_ur3 = camera_x + y_local
+            y_ur3 = camera_y + x_local
+            z_ur3 = camera_z - mean_depth  # 假设摄像头向下看，深度减去mean_depth
+
+            # 将坐标添加到列表
+            global_corners.append((x_ur3, y_ur3, z_ur3))
+
+        return self.swap_y_values(global_corners)
+
+    def paper_detection(self, cam_ee_pose):
         with self.image_lock:
-            if self.latest_img_color is not None:
-                # Convert to HSV
+            if self.latest_img_color is not None and self.latest_img_depth is not None:
                 hsv_image = cv2.cvtColor(self.latest_img_color, cv2.COLOR_BGR2HSV)
-
-                # Define sensitivity and white color range
-                sen = 90
+                sen = 70
                 lower_white = np.array([0, 0, 255 - sen])
                 upper_white = np.array([255, sen, 255])
-
-                # Create mask and filter noise
                 mask = cv2.inRange(hsv_image, lower_white, upper_white)
                 kernel = np.ones((5, 5), np.uint8)
                 mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
                 mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-
-                # Find contours and filter by area
                 contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                min_area = 500  # Set threshold
-                large_contours = [cnt for cnt in contours if cv2.contourArea(cnt) > min_area]
 
-                if large_contours:
-                    # Find largest contour and draw it
-                    largest_contour = max(large_contours, key=cv2.contourArea)
-                    cv2.drawContours(self.latest_img_color, [largest_contour], -1, (0, 255, 0), 2)
-
-                    # Find corners
-                    epsilon = 0.02 * cv2.arcLength(largest_contour, True)
-                    corners = cv2.approxPolyDP(largest_contour, epsilon, True)
-
-                    # Label corners
-                    for corner in corners:
-                        cv2.circle(self.latest_img_color, tuple(corner[0]), 5, (0, 0, 255), -1)
-
-                    # Calculate the real size of the A4 paper (in mm)
-                    real_width = 210  # A4 paper width in mm
-                    real_height = 297  # A4 paper height in mm
-
-                    # Calculate the detected size in pixels
+                if contours:
+                    largest_contour = max(contours, key=cv2.contourArea)
                     x, y, w, h = cv2.boundingRect(largest_contour)
+                    cv2.rectangle(self.latest_img_color, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
-                    # Calculate the distance based on the detected width and the real width of the A4 paper
-                    distance_width = (self.fx * real_width) / w
+                    mask = np.zeros_like(self.latest_img_depth, dtype=np.uint8)
+                    cv2.drawContours(mask, [largest_contour], -1, 255, -1)
+                    masked_depth = cv2.bitwise_and(self.latest_img_depth, self.latest_img_depth, mask=mask)
+                    valid_depths = masked_depth[masked_depth > 0]
+                    mean_depth = np.mean(valid_depths) if valid_depths.size > 0 else 0
+                    mean_depth_meters = (mean_depth - 10) / 1000.0  # Convert mm to meters
 
-                    # Calculate the distance based on the detected height and the real height of the A4 paper
-                    distance_height = (self.fy * real_height) / h
+                    # Define corners based on bounding box
+                    corners = [(x, y), (x + w, y), (x + w, y + h), (x, y + h)]
+                    for i, corner in enumerate(corners):
+                        cv2.circle(self.latest_img_color, corner, 5, (0, 0, 255), -1)
+                        cv2.putText(self.latest_img_color, f'{i}', corner, cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0),
+                                    2)
 
-                    # Take the average of the two distances as the final estimate
-                    distance = (distance_width + distance_height) / 2  # in mm
+                    # print(cam_ee_pose)
+                    glb_points = self.calculate_local_coordinates(cam_ee_pose,corners,mean_depth_meters)
+                    # print('glb', glb_points)
 
-                    # Calculate the real dimensions of the detected paper
-                    real_detected_width = distance * w / self.fx
-                    real_detected_height = distance * h / self.fy
+                    # local_corners = [((corner[0]) * mean_depth_meters,
+                    #                   (corner[1]) * mean_depth_meters,
+                    #                   mean_depth_meters) for corner in corners]
 
-                    # Display the real dimensions on the edges of the detected paper
-                    cv2.putText(self.latest_img_color, f"Real Width: {real_detected_width:.2f}mm", (x + w // 2, y - 10),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
-                    cv2.putText(self.latest_img_color, f"Real Height: {real_detected_height:.2f}mm",
-                                (x - 30, y + h // 2),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
-
-                    # Display the distance at the center of the detected paper
-                    center_x, center_y = x + w // 2, y + h // 2
-                    cv2.putText(self.latest_img_color, f"Distance: {distance:.2f}mm", (center_x - 50, center_y - 20),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
-
-                    # Convert corners to local coordinates
-                    local_corners = []
-                    for corner in corners:
-                        u, v = corner[0]
-                        x_coord = (u - self.cx) * distance / self.fx
-                        y_coord = (v - self.cy) * distance / self.fy
-                        local_corners.append((x_coord, y_coord, distance))
-
-                    # Store paper information
                     self.paper_info = {
-                        'corners': local_corners,
-                        'distance': distance
+                        'corners': glb_points,
                     }
 
     def callback(self, msg_color, msg_depth):
         with self.image_lock:
             self.latest_img_color = self.cv_bridge.imgmsg_to_cv2(msg_color, "bgr8")
             self.latest_img_depth = self.cv_bridge.imgmsg_to_cv2(msg_depth, "32FC1")
-

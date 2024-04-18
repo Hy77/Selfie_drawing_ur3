@@ -29,7 +29,9 @@ class UR3Control:
         self.group = moveit_commander.MoveGroupCommander("manipulator")
 
         # Initialize action client
-        self.client = actionlib.SimpleActionClient('/eff_joint_traj_controller/follow_joint_trajectory', FollowJointTrajectoryAction)
+        # self.client = actionlib.SimpleActionClient('/eff_joint_traj_controller/follow_joint_trajectory', FollowJointTrajectoryAction)
+        self.client = actionlib.SimpleActionClient('/scaled_pos_joint_traj_controller/follow_joint_trajectory',FollowJointTrajectoryAction)
+
         rospy.loginfo("Waiting for follow_joint_trajectory server...")
         # self.client.wait_for_server()
 
@@ -44,6 +46,26 @@ class UR3Control:
         # Get the current pose of the end effector
         current_ee_pose = self.get_current_ee_pose()
         rospy.loginfo("Current EE pose: " + str(pose_to_list(current_ee_pose.pose)))
+
+    def get_current_camera_ee_xyz(self):
+        # 获取当前UR3末端执行器的位姿
+        current_ee_pose_stamped = self.get_current_ee_pose()
+        current_ee_pose = current_ee_pose_stamped.pose
+
+        # 提取末端执行器的x, y, z坐标
+        current_ee_x = current_ee_pose.position.x
+        current_ee_y = current_ee_pose.position.y
+        current_ee_z = current_ee_pose.position.z
+
+        # 获取摄像头相对于末端执行器的偏移量
+        cam_ee_offset = self.define_cam_ee_offset()
+
+        # 根据偏移量计算摄像头的全局坐标
+        camera_x = current_ee_x - cam_ee_offset['x']
+        camera_y = current_ee_y + cam_ee_offset['y']
+        camera_z = current_ee_z - cam_ee_offset['z']
+
+        return (camera_x, camera_y, camera_z)
 
     def get_current_ee_pose(self):
         # Get the current pose and return it
@@ -171,48 +193,77 @@ class UR3Control:
 
     @staticmethod
     def define_cam_ee_offset():
-        # Define camera's offset
-        return {'x': 0.02806, 'z': -0.05358}  # x forward 0.02806m，z down 0.05358m
+        # 确定摄像头与机器人基座的偏移量，单位为米
+        return {'x': 0.02806, 'y': 0, 'z': 0.05358}
 
-    def transform_to_global(self, local_corners, distance):
-        # convert local coord to global coord
-        current_ee_global = self.get_current_ee_pose()
+    def transform_to_global(self, local_corners):
+        # 获取当前末端执行器的位置和姿态
+        current_ee_pose_stamped = self.get_current_ee_pose()
+        current_ee_pose = current_ee_pose_stamped.pose
+
         cam_ee_offset = self.define_cam_ee_offset()
 
         global_corners = []
-        for (x_local, y_local, _) in local_corners:
-            # Convert local coordinates to global coordinates using camera offsets
-            global_x = current_ee_global.position.x + x_local + cam_ee_offset['x']
-            global_y = current_ee_global.position.y + y_local
-            global_z = current_ee_global.position.z + distance + cam_ee_offset['z']
+        for (x_local, y_local, local_z) in local_corners:
+            # 计算全局坐标，其中考虑了摄像头到UR3基座的偏移量和笔的长度
+            global_x = current_ee_pose.position.x + y_local + cam_ee_offset['x']
+            global_y = current_ee_pose.position.y + x_local + cam_ee_offset['y']
+            global_z = current_ee_pose.position.z - local_z - cam_ee_offset['z']  # keep it as same
             global_corners.append((global_x, global_y, global_z))
 
         return global_corners
 
+    """
+    (-0.274, 0.11, 0.485)]
+    
+    0.438，0.124，0.246
+    0.5，-0.097，0.246
+    0.18，-0.11，0.246
+    0.188，0.095，0.246
+    
+    corners': [(-0.44664529411008586, 0.14662582645840025, 0.022435507736270677), 
+    (-0.44664529411008586, -0.07523352309518085, 0.022435507736270677), 
+    (-0.13908039009649906, -0.07523352309518085, 0.022435507736270677), 
+    (-0.13908039009649906, 0.14662582645840025, 0.022435507736270677)]}
+
+    glb [(-0.45429802319083784, 0.2987982699088576, 0.02242037856100726), 
+    (-0.45429802319083784, 0.0724513905804163, 0.02242037856100726), 
+    (-0.14582890205379445, 0.0724513905804163, 0.02242037856100726), 
+    (-0.14582890205379445, 0.2987982699088576, 0.02242037856100726)]
+    """
+
     def define_paper_global_coord(self, paper_local_info):
         # convert paper info into coordinates -> convert to global from local
         local_corners = paper_local_info['corners']
-        distance = paper_local_info['distance']  # dist between paper & cam
 
-        return self.transform_to_global(local_corners, distance)
+        # return self.transform_to_global(local_corners)
+        return local_corners
 
     # control ur3 move to the goal
     def run(self, goals, pen_length):
         # Process all goals
         for goal in goals:
+            print(goal)
             self.process_goal(goal, pen_length)
             # Wait for the result to make sure we don't send the next goal too early
             self.client.wait_for_result()
 
         # After all movements are done, plot the joint states
-        self.plot_velocities_accelerations()
+        # self.plot_velocities_accelerations()
 
 
 if __name__ == '__main__':
     try:
         # Initialize the UR3Control class
         ur_control = UR3Control()
-        ur_control.run([(0.3, -0.1, 0.47)], 0)
-
+        goals = [(-0.13908039009649906, 0.14662582645840025, 0.022435507736270677),
+                 (-0.44664529411008586, 0.14662582645840025, 0.022435507736270677),
+                 (-0.44664529411008586, -0.07523352309518085, 0.022435507736270677),
+                 (-0.13908039009649906, -0.07523352309518085, 0.022435507736270677),
+                 ]
+        ur_control.run([(-0.274, 0.11, 0.485)], 0)
+        ur_control.client.wait_for_result()
+        ur_control.run(goals[0:], 0.23)
+        ur_control.client.wait_for_result()
     except rospy.ROSInterruptException:
         pass
