@@ -6,18 +6,16 @@ from scipy.optimize import linear_sum_assignment
 
 class PathPlanner:
     def __init__(self, final_contours, image):
-        self.path = None
         self.final_contours = final_contours
         self.image = image
         self.tsp_coordinates = []
 
     def tsp_algo(self):
-
-        with open('tspcoordinates.txt', 'w') as coordi:  # Writing data to the txt file as a variable coordi
-            last_point = None  # Storing the last point of the last contour drawn
+        # with open('tspcoordinates.txt', 'w') as coordi:  # Writing data to the txt file as a variable coordi
+            last_point = None  # Storing the last point of the contour
             while self.final_contours:  # Loop until all contours are processed
                 min_distance = np.inf  # Setting to infinity to find small values
-                nearest_index_contour = None  # If no contours found, keep as None
+                nearest_index_contour = None  # Storing the nearest_index_contour from last_point
 
                 for i, contour in enumerate(self.final_contours):  # Execute the loop for each contour individually
                     contour_points = np.squeeze(contour)  # Extracting the coordinates of the contour
@@ -28,11 +26,12 @@ class PathPlanner:
                     else:
                         distance = 0
 
-                    if distance < min_distance:  # Making the minimum distance as the distance
-                        min_distance = distance
+                    if distance < min_distance:  # If contour is near to last_point, update distance and nearest index
+                        min_distance = distance  # Making the minimum distance as the distance
                         nearest_index_contour = i
 
-                contour = self.final_contours.pop(nearest_index_contour)
+                contour = self.final_contours.pop(nearest_index_contour)  # Removes nearest_index_contour which is
+                # last_point from final_contours
 
                 contour_points = np.squeeze(contour)  # Extracting the coordinates of the contour
 
@@ -53,24 +52,25 @@ class PathPlanner:
                 last_point = tsp_coordinates_3d[-1,
                                 :2]  # Last points are being updated which are x and y in the last element
 
-        # last element
 
         # Writing the TSP coordinates to the txt file
-        # for coordinate in tsp_coordinates_3d:
-        #     coordi.write(f"{coordinate[0]}, {coordinate[1]},{coordinate[2]}\n")
+        #         for coordinate in tsp_coordinates_3d:
+        #             coordi.write(f"{coordinate[0]}, {coordinate[1]},{coordinate[2]}\n")
 
-    def visualization(self):
-        # Run tsp algorithm
+    def visualization(self, width, height):
+    # Run tsp algorithm
         self.tsp_algo()
 
         animate = np.zeros_like(self.image)
 
-        # Draw curves
+    # Draw curves
         for tsp_coords in self.tsp_coordinates:
             for i in range(len(tsp_coords) - 1):
                 starting = (int(tsp_coords[i][0]), int(tsp_coords[i][1]))
                 ending = (int(tsp_coords[i + 1][0]), int(tsp_coords[i + 1][1]))
                 cv2.line(animate, starting, ending, (0, 255, 0), 1)
+                cv2.namedWindow("Animation", cv2.WINDOW_NORMAL)
+                cv2.resizeWindow("Animation", width, height)
                 cv2.imshow("Animation", animate)
                 cv2.waitKey(1)
 
