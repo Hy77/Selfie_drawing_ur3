@@ -54,19 +54,19 @@ class PaperDetector:
 
     @staticmethod
     def order_points(pts):
-        # 根据x+y的值找到最左上角的点
-        s = pts.sum(axis=1)
-        top_left_index = np.argmin(s)
-        ordered = np.roll(pts, -top_left_index, axis=0)
+        # 根据x+y的值找到右下角的点
+        s = [pt[0] + pt[1] for pt in pts]
+        bottom_right_index = np.argmax(s)
+        ordered = pts[bottom_right_index:] + pts[:bottom_right_index]
 
-        # 确保是顺时针方向
+        # 确保是逆时针方向
         # 计算向量叉乘，判断顺序（根据前三个点）
         if len(ordered) >= 3:
-            vec1 = ordered[1] - ordered[0]
-            vec2 = ordered[2] - ordered[1]
+            vec1 = np.array(ordered[1]) - np.array(ordered[0])
+            vec2 = np.array(ordered[2]) - np.array(ordered[1])
             cross_product = np.cross(vec1, vec2)
-            if cross_product > 0:
-                # 如果是逆时针，反转顺序（除了第一个点）
+            if cross_product < 0:
+                # 如果是顺时针，反转顺序（除了第一个点）
                 ordered[1:] = ordered[1:][::-1]
         return ordered
 
@@ -134,14 +134,15 @@ class PaperDetector:
 
                     # Define corners based on bounding box
                     corners = [(x, y), (x + w, y), (x + w, y + h), (x, y + h)]
-                    for i, corner in enumerate(corners):
+                    ordered_corners = self.order_points(corners)
+                    for i, corner in ordered_corners:
                         cv2.circle(self.latest_img_color, corner, 5, (0, 0, 255), -1)
                         cv2.putText(self.latest_img_color, f'{i}', corner, cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0),
                                     2)
 
                     # print(cam_ee_pose)
-                    glb_points = self.calculate_local_coordinates(cam_ee_pose,corners,mean_depth_meters)
-                    # print('glb', glb_points)
+                    glb_points = self.calculate_local_coordinates(cam_ee_pose, ordered_corners, mean_depth_meters)
+                    print('glb', glb_points)
 
                     # local_corners = [((corner[0]) * mean_depth_meters,
                     #                   (corner[1]) * mean_depth_meters,

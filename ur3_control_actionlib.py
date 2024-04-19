@@ -29,8 +29,8 @@ class UR3Control:
         self.group = moveit_commander.MoveGroupCommander("manipulator")
 
         # Initialize action client
-        # self.client = actionlib.SimpleActionClient('/eff_joint_traj_controller/follow_joint_trajectory', FollowJointTrajectoryAction)
-        self.client = actionlib.SimpleActionClient('/scaled_pos_joint_traj_controller/follow_joint_trajectory',FollowJointTrajectoryAction)
+        self.client = actionlib.SimpleActionClient('/eff_joint_traj_controller/follow_joint_trajectory', FollowJointTrajectoryAction)
+        # self.client = actionlib.SimpleActionClient('/scaled_pos_joint_traj_controller/follow_joint_trajectory',FollowJointTrajectoryAction)
 
         rospy.loginfo("Waiting for follow_joint_trajectory server...")
         # self.client.wait_for_server()
@@ -139,7 +139,7 @@ class UR3Control:
             # Create a trajectory point
             point = JointTrajectoryPoint()
             point.positions = joint_positions
-            point.time_from_start = rospy.Duration(5.0)
+            point.time_from_start = rospy.Duration(5)
 
             # Create a trajectory message
             trajectory = JointTrajectory()

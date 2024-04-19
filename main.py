@@ -2,16 +2,17 @@
 # main.py
 import cv2
 import time
+import os
 from selfie_drawing import SelfieDrawer
 
 import rospkg
 
-# find pkg path
+# Find package path
 rospack = rospkg.RosPack()
 package_path = rospack.get_path('selfie_drawer_pkg')
 
-# get img path based on the pkg path
-predictor_path = package_path + '/Selfie_drawing_ur3/shape_predictor_68_face_landmarks.dat'
+# Get image path based on the package path
+predictor_path = os.path.join(package_path, 'src/Selfie_drawing_ur3', 'shape_predictor_68_face_landmarks.dat')
 
 
 def take_photo():
@@ -50,13 +51,18 @@ def take_photo():
 def main():
     method = input(
         "Choose a vectorization method ('n' for nearest neighbor, 'b' for bilinear, or 'c' for bicubic): ").lower()
-    # image = take_photo()  # Capture a photo from the camera
-    image = cv2.imread(package_path + '/Selfie_drawing_ur3/photo_1.jpg')    # For debugging
-    if image is None:
-        raise FileNotFoundError(f"Image file captured_photo.jpg not found.")
-    selfie_drawer = SelfieDrawer(image, method, predictor_path)
-    selfie_drawer.run()
 
-# Press the green button in the gutter to run the script.
+    # image = take_photo()  # Capture a photo from the camera
+
+    # For debugging
+    image_path = os.path.join(package_path, 'src/Selfie_drawing_ur3', 'photo_1.jpg')
+    if not os.path.isfile(image_path):
+        raise FileNotFoundError(f"Image file {image_path} not found.")
+    image = cv2.imread(image_path)
+
+    selfie_drawer = SelfieDrawer(image, method, predictor_path)
+    # selfie_drawer.run()
+    selfie_drawer.start_drawing()
+
 if __name__ == '__main__':
     main()
