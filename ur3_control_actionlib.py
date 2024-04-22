@@ -29,8 +29,9 @@ class UR3Control:
         self.group = moveit_commander.MoveGroupCommander("manipulator")
 
         # Initialize action client
-        self.client = actionlib.SimpleActionClient('/eff_joint_traj_controller/follow_joint_trajectory', FollowJointTrajectoryAction)
-        # self.client = actionlib.SimpleActionClient('/scaled_pos_joint_traj_controller/follow_joint_trajectory',FollowJointTrajectoryAction)
+        # self.client = actionlib.SimpleActionClient('/eff_joint_traj_controller/follow_joint_trajectory', FollowJointTrajectoryAction)
+        self.client = actionlib.SimpleActionClient('/scaled_pos_joint_traj_controller/follow_joint_trajectory',
+                                                   FollowJointTrajectoryAction)
 
         rospy.loginfo("Waiting for follow_joint_trajectory server...")
         # self.client.wait_for_server()
@@ -230,6 +231,12 @@ class UR3Control:
     (-0.45429802319083784, 0.0724513905804163, 0.02242037856100726), 
     (-0.14582890205379445, 0.0724513905804163, 0.02242037856100726), 
     (-0.14582890205379445, 0.2987982699088576, 0.02242037856100726)]
+    
+    
+    'corners': [(-0.14811856527496634, 0.10722420683833081, 0.02614328094207563), 
+    (-0.4440109794789362, 0.10722420683833081, 0.02614328094207563), 
+    (-0.4440109794789362, -0.10196553523907485, 0.02614328094207563), 
+    (-0.14811856527496634, -0.10196553523907485, 0.02614328094207563)]
     """
 
     def define_paper_global_coord(self, paper_local_info):
@@ -246,7 +253,7 @@ class UR3Control:
             print(goal)
             self.process_goal(goal, pen_length)
             # Wait for the result to make sure we don't send the next goal too early
-            self.client.wait_for_result()
+            # self.client.wait_for_result()
 
         # After all movements are done, plot the joint states
         # self.plot_velocities_accelerations()
@@ -256,14 +263,10 @@ if __name__ == '__main__':
     try:
         # Initialize the UR3Control class
         ur_control = UR3Control()
-        goals = [(-0.13908039009649906, 0.14662582645840025, 0.022435507736270677),
-                 (-0.44664529411008586, 0.14662582645840025, 0.022435507736270677),
-                 (-0.44664529411008586, -0.07523352309518085, 0.022435507736270677),
-                 (-0.13908039009649906, -0.07523352309518085, 0.022435507736270677),
-                 ]
-        ur_control.run([(-0.274, 0.11, 0.485)], 0)
-        ur_control.client.wait_for_result()
+        goals = [(-0.14819689315343929, 0.05677191725504173, 0.026212555279538863), (-0.44357801592252305, 0.05677191725504173, 0.026212555279538863), (-0.44357801592252305, -0.15015018571761504, 0.026212555279538863), (-0.14819689315343929, -0.15015018571761504, 0.026212555279538863)]
+        # ur_control.run([(-0.274, 0.11, 0.485)], 0)
+        # ur_control.client.wait_for_result()
         ur_control.run(goals[0:], 0.23)
-        ur_control.client.wait_for_result()
+        # ur_control.client.wait_for_result()
     except rospy.ROSInterruptException:
         pass

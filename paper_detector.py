@@ -65,7 +65,7 @@ class PaperDetector:
             vec1 = np.array(ordered[1]) - np.array(ordered[0])
             vec2 = np.array(ordered[2]) - np.array(ordered[1])
             cross_product = np.cross(vec1, vec2)
-            if cross_product < 0:
+            if cross_product > 0:
                 # 如果是顺时针，反转顺序（除了第一个点）
                 ordered[1:] = ordered[1:][::-1]
         return ordered
@@ -97,9 +97,9 @@ class PaperDetector:
             x_local = (x_pixel - cx) * mean_depth / fx
             y_local = (y_pixel - cy) * mean_depth / fy
 
-            # UR3坐标系调整: 交换x和y，根据你的系统可能需要调整符号
+            # UR3坐标系调整: 交换x和y
             x_ur3 = camera_x + y_local
-            y_ur3 = camera_y + x_local
+            y_ur3 = camera_y + x_local - camera_z
             z_ur3 = camera_z - mean_depth  # 假设摄像头向下看，深度减去mean_depth
 
             # 将坐标添加到列表
@@ -135,9 +135,9 @@ class PaperDetector:
                     # Define corners based on bounding box
                     corners = [(x, y), (x + w, y), (x + w, y + h), (x, y + h)]
                     ordered_corners = self.order_points(corners)
-                    for i, corner in ordered_corners:
+                    for i, corner in enumerate(ordered_corners):
                         cv2.circle(self.latest_img_color, corner, 5, (0, 0, 255), -1)
-                        cv2.putText(self.latest_img_color, f'{i}', corner, cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0),
+                        cv2.putText(self.latest_img_color, str(i), corner, cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0),
                                     2)
 
                     # print(cam_ee_pose)

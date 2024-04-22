@@ -10,11 +10,11 @@ from message_filters import ApproximateTimeSynchronizer, Subscriber
 
 class SelfieDrawer:
     def __init__(self, image, method, predictor_path):
-        self.ur3_controller = UR3Control()
+        # self.ur3_controller = UR3Control()
         self.img_processor = ImgProcessor()
         self.path_planner = PathPlanner
         self.paper_detector = PaperDetector()
-        self.paper_local_info = None
+        self.paper_local_info = {}
         self.paper_global_info = None
         self.image = image
         self.method = method
@@ -38,7 +38,7 @@ class SelfieDrawer:
 
     def start_drawing(self):
         print("Done\n---------------------- Start Paper Location ----------------------")
-        self.ur3_controller.run(self.paper_local_info['corners'][0:], 0.23)  # let ur3 to reach 4 corners of the paper
+        # self.ur3_controller.run(self.paper_local_info['corners'][0:], 0.23)  # let ur3 to reach 4 corners of the paper
         print("Done\n--------------------- Start Image Processing ---------------------")
         self.handle_img_processing()  # run img processing & get contours
         print("Done\n------------------------Start TSP Planning -----------------------")
@@ -70,7 +70,7 @@ class SelfieDrawer:
 
     def run(self):
         print("---------------------- Moving to Init Pose -----------------------")
-        self.ur3_controller.run([(-0.274, 0.11, 0.485)], 0)  # init pose -> facing down to the paper
+        # self.ur3_controller.run([(-0.274, 0.11, 0.485)], 0)  # init pose -> facing down to the paper
         print("Done\n--------------------- Start Paper Detection ----------------------")
         # Run RGB-D camera to get paper info then start img processing & drawing etc
         sub_color = Subscriber("/camera/color/image_raw", Image)
