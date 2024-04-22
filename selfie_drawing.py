@@ -34,7 +34,7 @@ class SelfieDrawer:
     def tsp_algo(self):
         self.final_contour_updator()  # update final_contours & image
         self.path_planner = PathPlanner(self.final_contours, self.final_image)
-        self.path_planner.visualization()
+        self.path_planner.visualization(600, 850)
 
     def start_drawing(self):
         print("Done\n---------------------- Start Paper Location ----------------------")
