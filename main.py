@@ -61,8 +61,8 @@ def main():
     image = cv2.imread(image_path)
 
     selfie_drawer = SelfieDrawer(image, method, predictor_path)
-    # selfie_drawer.run()
-    selfie_drawer.start_drawing()
+    selfie_drawer.run()
+    # selfie_drawer.start_drawing()
 
 if __name__ == '__main__':
     main()
