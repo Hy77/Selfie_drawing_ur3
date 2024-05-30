@@ -52,17 +52,17 @@ def main():
     method = input(
         "Choose a vectorization method ('n' for nearest neighbor, 'b' for bilinear, or 'c' for bicubic): ").lower()
 
-    # image = take_photo()  # Capture a photo from the camera
+    image = take_photo()  # Capture a photo from the camera
 
-    # For debugging
-    image_path = os.path.join(package_path, 'src/Selfie_drawing_ur3', 'photo_1.jpg')
-    if not os.path.isfile(image_path):
-        raise FileNotFoundError(f"Image file {image_path} not found.")
-    image = cv2.imread(image_path)
+    # # For debugging
+    # image_path = os.path.join(package_path, 'src/Selfie_drawing_ur3', 'photo_1.jpg')
+    # if not os.path.isfile(image_path):
+    #     raise FileNotFoundError(f"Image file {image_path} not found.")
+    # image = cv2.imread(image_path)
 
     selfie_drawer = SelfieDrawer(image, method, predictor_path)
-    # selfie_drawer.run()
-    selfie_drawer.start_drawing()
+    selfie_drawer.run()
+    # selfie_drawer.start_drawing()
 
 if __name__ == '__main__':
     main()

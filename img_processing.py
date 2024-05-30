@@ -84,6 +84,51 @@ class ImgProcessor():
 
         return a5_contours
 
+    @staticmethod
+    def resize_with_aspect_ratio(image, target_width, target_height):
+        # Get the dimensions of the original image
+        original_height, original_width = image.shape[:2]
+
+        # Calculate the target aspect ratio
+        target_aspect_ratio = target_width / target_height
+
+        # Calculate the aspect ratio of the original image
+        original_aspect_ratio = original_width / original_height
+
+        if original_aspect_ratio > target_aspect_ratio:
+            # If the original image is wider than the target aspect ratio, scale by width
+            new_width = target_width
+            new_height = int(target_width / original_aspect_ratio)
+        else:
+            # If the original image is taller than the target aspect ratio, scale by height
+            new_height = target_height
+            new_width = int(target_height * original_aspect_ratio)
+
+        # Resize the image to the new dimensions
+        resized_image = cv2.resize(image, (new_width, new_height), interpolation=cv2.INTER_LINEAR)
+
+        # Create a new image with the target size and fill it with black
+        if len(image.shape) == 3 and image.shape[2] == 3:
+            result_image = np.zeros((target_height, target_width, 3), dtype=np.uint8)
+        else:
+            result_image = np.zeros((target_height, target_width), dtype=np.uint8)
+
+        # Calculate top-left corner to center the resized image
+        x_offset = (target_width - new_width) // 2
+        y_offset = (target_height - new_height) // 2
+
+        # Place the resized image on the black background
+        if len(image.shape) == 3 and image.shape[2] == 3:
+            result_image[y_offset:y_offset + new_height, x_offset:x_offset + new_width, :] = resized_image
+        else:
+            result_image[y_offset:y_offset + new_height, x_offset:x_offset + new_width] = resized_image
+
+        # Convert to color if the original image is grayscale
+        if len(image.shape) == 2:
+            result_image = cv2.cvtColor(result_image, cv2.COLOR_GRAY2BGR)
+
+        return result_image
+
     def contour_to_nearest_neighbor_vector(self, contour, merge_distance=10):
         # Convert contour coordinates to numpy array
         contour = np.array(contour, dtype=np.float32).reshape(-1, 2)
@@ -266,8 +311,8 @@ class ImgProcessor():
 
         # Resize the img to fixed size 360x480, -> easier to handle the edges/contours
         print("Rescaling the img to 360*480...")
-        resized_ori_image_bkg_removal_grey = cv2.resize(ori_image_bkg_removal_grey, (360, 480),
-                                                        interpolation=cv2.INTER_LINEAR)
+        resized_ori_image_bkg_removal_grey = self.resize_with_aspect_ratio(ori_image_bkg_removal_grey, 360, 480)
+
         # cv2.imshow("Resized Selfie - bkg removed - grey",
         #            resized_ori_image_bkg_removal_grey)  # Display the resized image
 
@@ -282,8 +327,8 @@ class ImgProcessor():
 
         # Use Canny to find edges
         print("Finding edges & contours...")
-        resized_ori_edges = cv2.Canny(resized_ori_blurred_img, threshold1=50,
-                                      threshold2=100)  # 50 100 using photos from online | 40 70 using camera
+        resized_ori_edges = cv2.Canny(resized_ori_blurred_img, threshold1=40,
+                                      threshold2=80)  # 50 100 using photos from online | 40 70 using camera
         # cv2.imshow('ori_Edges', resized_ori_edges)
         # Find contours on edges
         contours, _ = cv2.findContours(resized_ori_edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)

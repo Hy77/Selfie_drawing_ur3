@@ -43,7 +43,7 @@ class SelfieDrawer:
     def start_drawing(self):
         self.drawing_started = True
         print("Done\n---------------------- Start Paper Location ----------------------")
-        # self.ur3_controller.run(self.paper_local_info['corners'][0:], 0.25)  # let ur3 to reach 4 corners of the paper
+        self.ur3_controller.run(self.paper_local_info['corners'][0:], 0.25)  # let ur3 to reach 4 corners of the paper
         print("Done\n--------------------- Start Image Processing ---------------------")
         self.handle_img_processing()  # run img processing & get contours
         print("Done\n---------------------- Reset Arm Position ----------------------")
