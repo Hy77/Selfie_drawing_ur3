@@ -6,10 +6,9 @@
   <component name="ChangeListManager">
     <list default="true" id="ffb29561-02ef-4074-92cb-1c51790b2539" name="Changes" comment="edited paper_detector.py -&gt; new method to order corners -&gt; bot_right as start point -&gt; CCW to move ur3">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/img_processing.py" beforeDir="false" afterPath="$PROJECT_DIR$/img_processing.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/paper_detector.py" beforeDir="false" afterPath="$PROJECT_DIR$/paper_detector.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/selfie_drawing.py" beforeDir="false" afterPath="$PROJECT_DIR$/selfie_drawing.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ur3_control_actionlib.py" beforeDir="false" afterPath="$PROJECT_DIR$/ur3_control_actionlib.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

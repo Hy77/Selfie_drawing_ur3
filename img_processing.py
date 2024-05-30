@@ -262,14 +262,14 @@ class ImgProcessor():
         print("Removing background...")
         ori_image_bkg_removal = self.remove_background(ori_facial_region)
         ori_image_bkg_removal_grey = cv2.cvtColor(ori_image_bkg_removal, cv2.COLOR_BGR2GRAY)
-        cv2.imshow("Selfie - colour", ori_facial_region)
+        # cv2.imshow("Selfie - colour", ori_facial_region)
 
         # Resize the img to fixed size 360x480, -> easier to handle the edges/contours
         print("Rescaling the img to 360*480...")
         resized_ori_image_bkg_removal_grey = cv2.resize(ori_image_bkg_removal_grey, (360, 480),
                                                         interpolation=cv2.INTER_LINEAR)
-        cv2.imshow("Resized Selfie - bkg removed - grey",
-                   resized_ori_image_bkg_removal_grey)  # Display the resized image
+        # cv2.imshow("Resized Selfie - bkg removed - grey",
+        #            resized_ori_image_bkg_removal_grey)  # Display the resized image
 
         # NOW detect facial features again & get coordinates
         print("Finding senses...")
@@ -284,7 +284,7 @@ class ImgProcessor():
         print("Finding edges & contours...")
         resized_ori_edges = cv2.Canny(resized_ori_blurred_img, threshold1=50,
                                       threshold2=100)  # 50 100 using photos from online | 40 70 using camera
-        cv2.imshow('ori_Edges', resized_ori_edges)
+        # cv2.imshow('ori_Edges', resized_ori_edges)
         # Find contours on edges
         contours, _ = cv2.findContours(resized_ori_edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
@@ -306,7 +306,7 @@ class ImgProcessor():
         # Draw contours on a5 size paper
         for contour in a5_contours:
             cv2.drawContours(a5_image, [contour], -1, [255, 255, 255], 1)
-        self.cv2_imshow_resize_image_for_display('A5 Contours', a5_image)
+        # self.cv2_imshow_resize_image_for_display('A5 Contours', a5_image)
         # Save the original A5 size vectorized image
         cv2.imwrite('A5 Contours.jpg', a5_image)
 
@@ -316,7 +316,7 @@ class ImgProcessor():
         a5_drawing_board = np.zeros_like(a5_image)
         for contour in custom_vectorized_contours:
             cv2.drawContours(a5_drawing_board, [contour], -1, [255, 255, 255], 1)
-        self.cv2_imshow_resize_image_for_display('a5_drawing_board', a5_drawing_board)
+        # self.cv2_imshow_resize_image_for_display('a5_drawing_board', a5_drawing_board)
         cv2.imwrite(f'{method.upper()} vectorized_a5_drawing_board.jpg', a5_drawing_board)
 
         # update final contours & images

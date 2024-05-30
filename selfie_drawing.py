@@ -24,6 +24,7 @@ class SelfieDrawer:
         self.final_image = None
         self.paper_detected = False
         self.drawing_started = False
+        self.final_drawing_coord = []
 
     def handle_img_processing(self):
         self.img_processor.img_processing(self.image, self.method, self.predictor_path)
@@ -37,12 +38,12 @@ class SelfieDrawer:
         self.path_planner = PathPlanner(self.final_contours)
         self.path_planner.visualization()
         self.path_planner.scaling()
-        self.path_planner.update_tsp_coordinates()
+        self.final_drawing_coord = self.path_planner.update_tsp_coordinates()
 
     def start_drawing(self):
         self.drawing_started = True
         print("Done\n---------------------- Start Paper Location ----------------------")
-        self.ur3_controller.run(self.paper_local_info['corners'][0:], 0.25)  # let ur3 to reach 4 corners of the paper
+        # self.ur3_controller.run(self.paper_local_info['corners'][0:], 0.25)  # let ur3 to reach 4 corners of the paper
         print("Done\n--------------------- Start Image Processing ---------------------")
         self.handle_img_processing()  # run img processing & get contours
         print("Done\n---------------------- Reset Arm Position ----------------------")
@@ -50,6 +51,8 @@ class SelfieDrawer:
         print("Done\n------------------------Start TSP Planning -----------------------")
         self.tsp_algo()  # run tsp algo get effective path
         # TODO: control ur3 to move to these coordinates
+        print("Done\n------------------------Start Drawing -----------------------")
+        self.ur3_controller.run(self.final_drawing_coord, 0.19)
 
     def callback(self, msg_color, msg_depth):
         try:
