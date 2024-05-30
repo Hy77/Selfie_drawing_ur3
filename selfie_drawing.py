@@ -34,8 +34,10 @@ class SelfieDrawer:
 
     def tsp_algo(self):
         self.final_contour_updator()  # update final_contours & image
-        self.path_planner = PathPlanner(self.final_contours, self.final_image)
-        self.path_planner.visualization(600, 850)
+        self.path_planner = PathPlanner(self.final_contours)
+        self.path_planner.visualization()
+        self.path_planner.scaling()
+        self.path_planner.update_tsp_coordinates()
 
     def start_drawing(self):
         self.drawing_started = True
@@ -46,7 +48,7 @@ class SelfieDrawer:
         print("Done\n---------------------- Reset Arm Position ----------------------")
         self.ur3_controller.run([(-0.274, 0.11, 0.485)], 0)
         print("Done\n------------------------Start TSP Planning -----------------------")
-        # self.tsp_algo()  # run tsp algo get effective path
+        self.tsp_algo()  # run tsp algo get effective path
         # TODO: control ur3 to move to these coordinates
 
     def callback(self, msg_color, msg_depth):
