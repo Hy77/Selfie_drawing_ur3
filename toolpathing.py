@@ -1,79 +1,113 @@
-import cv2
 import numpy as np
-from scipy.spatial import distance_matrix
-from scipy.optimize import linear_sum_assignment
+from simplification.cutil import simplify_coords
+import matplotlib.pyplot as plt
+from concorde.tsp import TSPSolver
+from mpl_toolkits.mplot3d import Axes3D
 
 
 class PathPlanner:
-    def __init__(self, final_contours, image):
+    def __init__(self, final_contours):
         self.final_contours = final_contours
-        self.image = image
-        self.tsp_coordinates = []
+        self.nestedcoords = []
+        self.sendcoords= []
+        self.storedsimcoordinates=[]
+        self.listofcoords=[]
+
+    def simplify(self):
+        # print(self.final_contours)
+        for contour in self.final_contours:
+            contour_points = np.squeeze(contour)
+            simplifycoords = simplify_coords(contour_points, 22)
+
+            self.storedsimcoordinates.append(simplifycoords)
+        print("storedsimcoordinates",self.storedsimcoordinates)
+        print("type storedsimcoordinates:", type(self.storedsimcoordinates))
 
     def tsp_algo(self):
-        # with open('tspcoordinates.txt', 'w') as coordi:  # Writing data to the txt file as a variable coordi
-            last_point = None  # Storing the last point of the contour
-            while self.final_contours:  # Loop until all contours are processed
-                min_distance = np.inf  # Setting to infinity to find small values
-                nearest_index_contour = None  # Storing the nearest_index_contour from last_point
+        self.simplify()
+        firstcoords=[]
+        lastcoords=[]
+        for array in self.storedsimcoordinates:
+            firstcoords.append(array[0])
+            lastcoords.append(array[-1])
+        firstcoords = np.array(firstcoords)
+        lastcoords = np.array(lastcoords)
+        print("firstcoords",firstcoords)
 
-                for i, contour in enumerate(self.final_contours):  # Execute the loop for each contour individually
-                    contour_points = np.squeeze(contour)  # Extracting the coordinates of the contour
+        solver = TSPSolver.from_data(firstcoords[:,0], lastcoords[:,1], norm='EUC_2D')
 
-                    if last_point is not None:  # Makes sure that there is distance
-                        distance = np.linalg.norm(
-                            contour_points[0] - last_point)  # Distance calculated to the last point
-                    else:
-                        distance = 0
+        tour_data = solver.solve()
 
-                    if distance < min_distance:  # If contour is near to last_point, update distance and nearest index
-                        min_distance = distance  # Making the minimum distance as the distance
-                        nearest_index_contour = i
+        path = tour_data.tour
 
-                contour = self.final_contours.pop(nearest_index_contour)  # Removes nearest_index_contour which is
-                # last_point from final_contours
+        for x in path:
+            coords = self.storedsimcoordinates[x]
+            self.nestedcoords.append(coords)
+        print("nested", self.nestedcoords)
 
-                contour_points = np.squeeze(contour)  # Extracting the coordinates of the contour
-
-                depth_value = 100  # Constant depth value of 100 millimeters
-
-                dist_matrix = distance_matrix(contour_points,
-                                              contour_points)  # Calculating the pairwise distance matrix
-
-                row, col = linear_sum_assignment(dist_matrix)  # Solve the TSP using the Hungarian Algorithm
-
-                ordered_contour_points = contour_points[col]  # Reordering the contour points of the TSP
-
-                # Converting the 2D TSP coordinates to 3D TSP coordinates that has a constant depth value
-                tsp_coordinates_3d = np.hstack(
-                    (ordered_contour_points, np.full((len(ordered_contour_points), 1), depth_value)))
-
-                self.tsp_coordinates.append(tsp_coordinates_3d)  # Adding the 3d coordinates to the tsp coordinates
-                last_point = tsp_coordinates_3d[-1,
-                                :2]  # Last points are being updated which are x and y in the last element
-
-
-        # Writing the TSP coordinates to the txt file
-        #         for coordinate in tsp_coordinates_3d:
-        #             coordi.write(f"{coordinate[0]}, {coordinate[1]},{coordinate[2]}\n")
-
-    def visualization(self, width, height):
-    # Run tsp algorithm
+    def visualization(self):
+        # Run tsp algorithm
         self.tsp_algo()
+        sum = 0
+        for coords in self.nestedcoords:
+            sum += coords.shape[0]
+        print(sum)
+        for coords in self.nestedcoords:
+            plt.gca().invert_yaxis()
+            print(f"coords {coords}:",coords.shape)
+            plt.plot(coords[:,0], coords[:,1], '-o')
+        plt.show()
 
-        animate = np.zeros_like(self.image)
+    def scaling(self):
+        # self.tsp_algo()
+        global_corners = np.array([
+            (-0.14819689315343929, 0.05677191725504173),
+            (-0.44357801592252305, 0.05677191725504173),
+            (-0.44357801592252305, -0.15015018571761504),
+            (-0.14819689315343929, -0.15015018571761504)
+        ], dtype=np.float32)
 
-    # Draw curves
-        for tsp_coords in self.tsp_coordinates:
-            for i in range(len(tsp_coords) - 1):
-                starting = (int(tsp_coords[i][0]), int(tsp_coords[i][1]))
-                ending = (int(tsp_coords[i + 1][0]), int(tsp_coords[i + 1][1]))
-                cv2.line(animate, starting, ending, (0, 255, 0), 1)
-                cv2.namedWindow("Animation", cv2.WINDOW_NORMAL)
-                cv2.resizeWindow("Animation", width, height)
-                cv2.imshow("Animation", animate)
-                cv2.waitKey(1)
+        local_corners= np.array([
+            (0, 0),
+            (0, 2480),
+            (1748, 2480),
+            (1748, 0),
+        ], dtype=np.float32)
+        print(self.nestedcoords)
+        # A @ T = B
+        T = np.linalg.pinv(local_corners) @ global_corners
+        print(T.shape)
+        original_length = len(self.nestedcoords)
 
-        # Wait for a key press and close windows if 'q' is pressed
-        if cv2.waitKey(0) & 0xFF == ord('q'):
-            cv2.destroyAllWindows()
+        plan_contour = []
+        height = 0.026212555279538863
+        for contour in self.nestedcoords[: int(original_length)]:
+            contour_stack_z = np.column_stack((contour, np.ones(contour.shape[0])*height))
+            duplicate_point = np.array((contour[-1][0], contour[-1][1], height + height))
+            contour_z = np.vstack((contour_stack_z, duplicate_point))
+            plan_contour.append(contour_z)
+
+        final_contour = plan_contour[0]
+        for contour in plan_contour[1:]:
+            final_contour = np.vstack((final_contour, contour))
+
+        print(final_contour.shape)
+        checker = final_contour
+        checker[:,:2] = final_contour[:,:2] @ T
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+
+        ax.plot(checker[:,0], checker[:,1], checker[:,2])
+        plt.show()
+
+        print(checker)
+        self.listofcoords=checker
+        for lists in self.listofcoords:
+            listofcoords=tuple(lists)
+            self.sendcoords.append(listofcoords)
+        print(self.sendcoords)
+        print(type(self.sendcoords))
+
+    def update_tsp_coordinates(self):
+        print("list of coords",self.sendcoords)
+        return self.sendcoords
