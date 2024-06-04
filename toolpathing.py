@@ -12,8 +12,8 @@ class PathPlanner:
         self.sendcoords = []
         self.storedsimcoordinates = []
         self.listofcoords = []
-        self.invertedy = []
         self.convertedm = []
+        self.transformed_coords=[]
 
     def simplify(self):
         for contour in self.final_contours:
@@ -45,18 +45,12 @@ class PathPlanner:
             self.nestedcoords.append(coords)
         print("nested", self.nestedcoords)
 
-        height = 2480
-
-        for coords in self.nestedcoords:
-            coords[:, 1] = height - coords[:, 1]
-            self.invertedy.append(coords)
-
         dpi = 300
         dpmm = dpi / 25.4
         dpm = dpmm * 1000
         pixelperm = 1 / dpm
         print("pixelperm:", pixelperm)
-        for coordinatess in self.invertedy:
+        for coordinatess in self.nestedcoords:
             converttomcoords = coordinatess * pixelperm
             self.convertedm.append(converttomcoords)
 
@@ -65,7 +59,7 @@ class PathPlanner:
         global_center = global_corners.mean(axis=0)
         local_center = local_corners.mean(axis=0)
 
-        scale_factor = 0.5
+        scale_factor = 1.2
         scaling_matrix = np.array([
             [0, scale_factor, 0],
             [-scale_factor, 0, 0],
@@ -116,40 +110,15 @@ class PathPlanner:
         plt.gca().invert_yaxis()
         plt.show()
 
+        self.transformed_coords=transformed_coords
+
     def scaling(self):
-        global_corners = np.array([
-            (-0.14819689315343929, 0.05677191725504173),
-            (-0.44357801592252305, 0.05677191725504173),
-            (-0.44357801592252305, -0.15015018571761504),
-            (-0.14819689315343929, -0.15015018571761504)
-        ], dtype=np.float32)
 
-        local_corners = np.array([
-            (0.148, 0),
-            (0.148, 0.210),
-            (0, 0.210),
-            (0, 0),
-        ], dtype=np.float32)
-
-        scale_factor = 0.5
-        global_center = global_corners.mean(axis=0)
-        local_center = local_corners.mean(axis=0)
-
-        scaling_matrix = np.array([
-            [0, scale_factor, 0],
-            [-scale_factor, 0, 0],
-            [0, 0, 1]
-        ])
-
-        transform_matrix = np.eye(3)
-        transform_matrix[0:2, 0:2] = scaling_matrix[0:2, 0:2]
-        transform_matrix[0:2, 2] = global_center - scaling_matrix[0:2, 0:2] @ local_center
-
-        original_length = len(self.convertedm)
+        original_length = len(self.transformed_coords)
 
         plan_contour = []
         height = 0.026212555279538863
-        for contour in self.convertedm[: int(original_length)]:
+        for contour in self.transformed_coords[: int(original_length)]:
             contour_stack_z = np.column_stack((contour, np.ones(contour.shape[0]) * height))
             duplicate_point = np.array((contour[-1][0], contour[-1][1], height + height))
             contour_z = np.vstack((contour_stack_z, duplicate_point))
@@ -161,7 +130,7 @@ class PathPlanner:
 
         print(final_contour.shape)
         checker = final_contour
-        checker[:, :2] = final_contour[:, :2] @ transform_matrix[:2, :2] + transform_matrix[:2, 2]
+        checker[:, :2] = final_contour[:, :2]
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
 
