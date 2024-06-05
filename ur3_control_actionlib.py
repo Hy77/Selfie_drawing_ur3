@@ -132,7 +132,7 @@ class UR3Control:
             rospy.logerr("Service did not process request: " + str(exc))
             return None
 
-    def move_to_pose(self, pose):
+    def move_to_pose(self, pose, move_time):
         # Compute the joint positions from the desired pose using IK
         joint_positions = self.compute_ik_pose(pose)
 
@@ -140,7 +140,7 @@ class UR3Control:
             # Create a trajectory point
             point = JointTrajectoryPoint()
             point.positions = joint_positions
-            point.time_from_start = rospy.Duration(5)
+            point.time_from_start = rospy.Duration(move_time)
 
             # Create a trajectory message
             trajectory = JointTrajectory()
@@ -176,7 +176,7 @@ class UR3Control:
         desired_pose.pose.orientation.w = quaternion[3]
 
         # Move the robot to the new pose
-        result = self.move_to_pose(desired_pose)
+        result = self.move_to_pose(desired_pose, move_time=1)
         if result:
             rospy.loginfo("Robot moved to new pose")
         else:
