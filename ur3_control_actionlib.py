@@ -30,8 +30,7 @@ class UR3Control:
 
         # Initialize action client
         # self.client = actionlib.SimpleActionClient('/eff_joint_traj_controller/follow_joint_trajectory', FollowJointTrajectoryAction)
-        self.client = actionlib.SimpleActionClient('/scaled_pos_joint_traj_controller/follow_joint_trajectory',
-                                                   FollowJointTrajectoryAction)
+        self.client = actionlib.SimpleActionClient('/scaled_pos_joint_traj_controller/follow_joint_trajectory', FollowJointTrajectoryAction)
 
         rospy.loginfo("Waiting for follow_joint_trajectory server...")
         # self.client.wait_for_server()

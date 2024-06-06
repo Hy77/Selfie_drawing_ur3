@@ -6,7 +6,7 @@ from mpl_toolkits.mplot3d import Axes3D
 
 
 class PathPlanner:
-    def __init__(self, final_contours):
+    def __init__(self, final_contours, paper_coord):
         self.final_contours = final_contours
         self.nestedcoords = []
         self.sendcoords = []
@@ -14,6 +14,7 @@ class PathPlanner:
         self.listofcoords = []
         self.convertedm = []
         self.transformed_coords=[]
+        self.paper_coord = paper_coord
 
     def simplify(self):
         for contour in self.final_contours:
@@ -80,12 +81,15 @@ class PathPlanner:
     def visualization(self):
         self.tsp_algo()
 
-        global_corners = np.array([
-            (-0.14819689315343929, 0.05677191725504173),
-            (-0.44357801592252305, 0.05677191725504173),
-            (-0.44357801592252305, -0.15015018571761504),
-            (-0.14819689315343929, -0.15015018571761504)
-        ], dtype=np.float32)
+        # # for debugging
+        # global_corners = np.array([
+        #     (-0.14819689315343929, 0.05677191725504173),
+        #     (-0.44357801592252305, 0.05677191725504173),
+        #     (-0.44357801592252305, -0.15015018571761504),
+        #     (-0.14819689315343929, -0.15015018571761504)
+        # ], dtype=np.float32)
+
+        global_corners = self.paper_coord
 
         local_corners = np.array([
             (0, 0),
@@ -101,14 +105,16 @@ class PathPlanner:
             sum_points += coords.shape[0]
         print(sum_points)
 
-        for coords in transformed_coords:
-            print(f"coords {coords}:", coords.shape)
-            plt.plot(coords[:, 0], coords[:, 1], '-o')
-
-        plt.xlim(-0.443, -0.148)
-        plt.ylim(-0.15, 0.056)
-        plt.gca().invert_yaxis()
-        plt.show()
+        # comment these out if errors pop up
+        # for coords in transformed_coords:
+        #     print(f"coords {coords}:", coords.shape)
+        #     plt.plot(coords[:, 0], coords[:, 1], '-o')
+        #
+        # plt.xlim(-0.443, -0.148)
+        # plt.ylim(-0.15, 0.056)
+        # plt.gca().invert_yaxis()
+        # plt.show()
+        # comment these out if errors pop up
 
         self.transformed_coords=transformed_coords
 
@@ -131,11 +137,14 @@ class PathPlanner:
         print(final_contour.shape)
         checker = final_contour
         checker[:, :2] = final_contour[:, :2]
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
 
-        ax.plot(checker[:, 0], checker[:, 1], checker[:, 2])
-        plt.show()
+        # comment these out if errors pop up
+        # fig = plt.figure()
+        # ax = fig.add_subplot(111, projection='3d')
+        #
+        # ax.plot(checker[:, 0], checker[:, 1], checker[:, 2])
+        # plt.show()
+        # comment these out if errors pop up
 
         print(checker)
         self.listofcoords = checker
