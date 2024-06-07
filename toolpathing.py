@@ -7,6 +7,7 @@ from mpl_toolkits.mplot3d import Axes3D
 
 class PathPlanner:
     def __init__(self, final_contours, paper_coord):
+        # remove paper_coord if using the predefined global coordinates
         self.final_contours = final_contours
         self.nestedcoords = []
         self.sendcoords = []
@@ -18,34 +19,38 @@ class PathPlanner:
 
     def simplify(self):
         for contour in self.final_contours:
-            contour_points = np.squeeze(contour)
+            contour_points = np.squeeze(contour) # removes the nested list.
+            # simplifies the coordinates using RDP algorithm of epsilon 22.
             simplifycoords = simplify_coords(contour_points, 22)
             self.storedsimcoordinates.append(simplifycoords)
         print("storedsimcoordinates", self.storedsimcoordinates)
         print("type storedsimcoordinates:", type(self.storedsimcoordinates))
 
     def tsp_algo(self):
+        # Using Concorde TSP solver from https://github.com/jvkersch/pyconcorde
         self.simplify()
         firstcoords = []
         lastcoords = []
         for array in self.storedsimcoordinates:
+            # Getting the first coordinates.
             firstcoords.append(array[0])
+            # Getting the last coordinates.
             lastcoords.append(array[-1])
         firstcoords = np.array(firstcoords)
         lastcoords = np.array(lastcoords)
         print("firstcoords", firstcoords)
-
+        # Using the firstcoords x coordinates and lastcoords y coordinates.
         solver = TSPSolver.from_data(firstcoords[:, 0], lastcoords[:, 1], norm='EUC_2D')
-
+        # Solving the TSP solver.
         tour_data = solver.solve()
-
+        # Getting the path from the solver.
         path = tour_data.tour
-
+        # Arranging the list of coordinates in regards of the path.
         for x in path:
             coords = self.storedsimcoordinates[x]
             self.nestedcoords.append(coords)
         print("nested", self.nestedcoords)
-
+        # Converting 300 DPI A5 size to meters
         dpi = 300
         dpmm = dpi / 25.4
         dpm = dpmm * 1000
@@ -106,6 +111,7 @@ class PathPlanner:
         print(sum_points)
 
         # comment these out if errors pop up
+        # visualisation of the 2d plot.
         # for coords in transformed_coords:
         #     print(f"coords {coords}:", coords.shape)
         #     plt.plot(coords[:, 0], coords[:, 1], '-o')
@@ -125,15 +131,18 @@ class PathPlanner:
         plan_contour = []
         height = 0.026212555279538863
         for contour in self.transformed_coords[: int(original_length)]:
+            # Adding the z coordinate which is height.
             contour_stack_z = np.column_stack((contour, np.ones(contour.shape[0]) * height))
+            # Duplicating the last coordinate set with double the height.
             duplicate_point = np.array((contour[-1][0], contour[-1][1], height + height))
+            # Vetically stacking the z coordinate and duplicated points.
             contour_z = np.vstack((contour_stack_z, duplicate_point))
             plan_contour.append(contour_z)
-
+        # Merging the coordinates into one.
         final_contour = plan_contour[0]
         for contour in plan_contour[1:]:
             final_contour = np.vstack((final_contour, contour))
-
+        # Storing the final_contour into checker.
         print(final_contour.shape)
         checker = final_contour
         checker[:, :2] = final_contour[:, :2]
@@ -145,10 +154,11 @@ class PathPlanner:
         # ax.plot(checker[:, 0], checker[:, 1], checker[:, 2])
         # plt.show()
         # comment these out if errors pop up
-
+        # Storing the coordinates into self.listofcoords
         print(checker)
         self.listofcoords = checker
         for lists in self.listofcoords:
+            # Turning the list into a tuple.
             listofcoords = tuple(lists)
             self.sendcoords.append(listofcoords)
         print(self.sendcoords)
