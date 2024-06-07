@@ -31,6 +31,18 @@ This guide will help you set up a UR3 robot simulator using Gazebo, MoveIt, and 
    ```bash
    sudo apt-get install ros-noetic-ur-gazebo ros-noetic-ur3-moveit-config ros-noetic-moveit
    ```
+
+2. Install the necessary packages for visualization and solvers:
+
+   ```bash
+   pip install simplification
+
+   pip install 'pyconcorde @ git+https://github.com/jvkersch/pyconcorde'
+
+   pip install matplotlib
+
+   ```
+   
 3. Install the RealSense camera package for ROS:
 
    ```bash
